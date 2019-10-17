@@ -7,7 +7,7 @@ import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCallback;
 import android.bluetooth.BluetoothGattCharacteristic;
-import android.bluetooth.BluetoothGattService;
+import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothManager;
 import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
@@ -18,23 +18,35 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.AsyncTask;
-import android.os.Handler;
-import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.os.Handler;
 import android.text.method.ScrollingMovementMethod;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
 
+import androidx.appcompat.app.AppCompatActivity;
+
+import com.codepath.asynchttpclient.AsyncHttpClient;
+import com.codepath.asynchttpclient.RequestHeaders;
+import com.codepath.asynchttpclient.RequestParams;
+import com.codepath.asynchttpclient.callback.JsonHttpResponseHandler;
 import com.google.android.gms.appindexing.Action;
 import com.google.android.gms.appindexing.AppIndex;
 import com.google.android.gms.common.api.GoogleApiClient;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+
+import okhttp3.Headers;
+import okhttp3.MediaType;
+import okhttp3.RequestBody;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -46,10 +58,18 @@ public class MainActivity extends AppCompatActivity {
     TextView peripheralTextView;
     private final static int REQUEST_ENABLE_BT = 1;
     private static final int PERMISSION_REQUEST_COARSE_LOCATION = 1;
+    private static final String deviceName = "EnliteZero";
 
     Boolean btScanning = false;
     int deviceIndex = 0;
     ArrayList<BluetoothDevice> devicesDiscovered = new ArrayList<BluetoothDevice>();
+    static Map<String, String> serviceCharacteristicMap = new HashMap<>();
+
+    static {
+        serviceCharacteristicMap.put("0000181A-0000-1000-8000-00805F9B34FB", "00002A6E-0000-1000-8000-00805F9B34FB");
+        serviceCharacteristicMap.put("1bf8d02d-d56f-4d38-b068-d60d38637b46", "059621e8-b53c-40a7-a006-ef9afccff870");
+    }
+
     EditText deviceIndexInput;
     Button connectToDevice;
     Button disconnectDevice;
@@ -166,9 +186,37 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onCharacteristicChanged(BluetoothGatt gatt, final BluetoothGattCharacteristic characteristic) {
             // this will get called anytime you perform a read or write characteristic operation
+            Integer value = characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT16,0);
+            System.out.println("Characteristic discovered for service: " + value);
+            JSONObject jsonObject = new JSONObject();
+            try {
+                /**
+                 * {
+                 *    "fields" : {
+                 *     "by" : 1.0
+                 *    },
+                 *    "tags" : {
+                 *        "sensorID" : "sensorId",
+                 *        "equipment" :"110"
+                 *    },
+                 *    "time": 1571208265000
+                 * }
+                 */
+                JSONObject fields = new JSONObject();
+                fields.put("temp", Double.valueOf(value)/100);
+                JSONObject tags = new JSONObject();
+                fields.put("sensorID", "111111");
+                fields.put("equipment", "110");
+                jsonObject.put("fields", fields);
+                jsonObject.put("tags", tags);
+                jsonObject.put("time", System.currentTimeMillis());
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+            sendApiRequestToServer(jsonObject);
             MainActivity.this.runOnUiThread(new Runnable() {
                 public void run() {
-                    peripheralTextView.append("device read or wrote to\n");
+                    peripheralTextView.append("device read or wrote to\n" + characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT16,0));
                 }
             });
         }
@@ -218,7 +266,9 @@ public class MainActivity extends AppCompatActivity {
                     peripheralTextView.append("device services have been discovered\n");
                 }
             });
-            displayGattServices(bluetoothGatt.getServices());
+
+            createDescriptorsFromList();
+            // displayGattServices(bluetoothGatt.getService(UUID.fromString("0000181A-0000-1000-8000-00805F9B34FB")));
         }
 
         @Override
@@ -230,7 +280,38 @@ public class MainActivity extends AppCompatActivity {
                 broadcastUpdate(ACTION_DATA_AVAILABLE, characteristic);
             }
         }
+
+        @Override
+        public void onDescriptorWrite(BluetoothGatt gatt, BluetoothGattDescriptor descriptor,
+                                      int status) {
+            createDescriptorsFromList();
+        }
     };
+
+    private void createDescriptorsFromList() {
+        if(serviceCharacteristicMap.size()==0) {
+            return;
+        }
+        Map.Entry<String,String> entry = serviceCharacteristicMap.entrySet().iterator().next();
+        String service = entry.getKey();
+        String characteristic = entry.getValue();
+        System.out.println(createDescriptorsForCharacteristics(service, characteristic));
+        serviceCharacteristicMap.remove(service);
+    }
+
+    private boolean createDescriptorsForCharacteristics(String serviceUUID, String characteristicUUID) {
+        try {
+            Thread.sleep(2000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        BluetoothGattCharacteristic characteristic = bluetoothGatt.getService(UUID.fromString(serviceUUID))
+                                                                  .getCharacteristic(UUID.fromString(characteristicUUID));
+        bluetoothGatt.setCharacteristicNotification(characteristic, Boolean.TRUE);
+        BluetoothGattDescriptor bluetoothGattDescriptor = characteristic.getDescriptor(UUID.fromString("00002902-0000-1000-8000-00805F9B34FB"));
+        bluetoothGattDescriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
+        return bluetoothGatt.writeDescriptor(bluetoothGattDescriptor);
+    }
 
     private void broadcastUpdate(final String action,
                                  final BluetoothGattCharacteristic characteristic) {
@@ -312,39 +393,6 @@ public class MainActivity extends AppCompatActivity {
         bluetoothGatt.disconnect();
     }
 
-    private void displayGattServices(List<BluetoothGattService> gattServices) {
-        if (gattServices == null) return;
-
-        // Loops through available GATT Services.
-        for (BluetoothGattService gattService : gattServices) {
-
-            final String uuid = gattService.getUuid().toString();
-            System.out.println("Service discovered: " + uuid);
-            MainActivity.this.runOnUiThread(new Runnable() {
-                public void run() {
-                    peripheralTextView.append("Service disovered: "+uuid+"\n");
-                }
-            });
-            new ArrayList<HashMap<String, String>>();
-            List<BluetoothGattCharacteristic> gattCharacteristics =
-                    gattService.getCharacteristics();
-
-            // Loops through available Characteristics.
-            for (BluetoothGattCharacteristic gattCharacteristic :
-                    gattCharacteristics) {
-
-                final String charUuid = gattCharacteristic.getUuid().toString();
-                System.out.println("Characteristic discovered for service: " + charUuid);
-                MainActivity.this.runOnUiThread(new Runnable() {
-                    public void run() {
-                        peripheralTextView.append("Characteristic discovered for service: "+charUuid+"\n");
-                    }
-                });
-
-            }
-        }
-    }
-
     @Override
     public void onStart() {
         super.onStart();
@@ -379,5 +427,28 @@ public class MainActivity extends AppCompatActivity {
         );
         AppIndex.AppIndexApi.end(client, viewAction);
         client.disconnect();
+    }
+
+    public void sendApiRequestToServer(JSONObject json) {
+        AsyncHttpClient client = new AsyncHttpClient();
+
+        RequestParams params = new RequestParams();
+        RequestHeaders requestHeaders = new RequestHeaders();
+        requestHeaders.put("x-auth-token", "token");
+        RequestBody body = RequestBody.create(MediaType.parse("application/json; charset=utf-8"), json.toString());
+
+        client.post("https://demo.dashboard.enliteresearch.com/dashboard/upsert/external/data", requestHeaders, params, body, new JsonHttpResponseHandler() {
+            @Override
+            public void onSuccess(int statusCode, Headers headers, JSON json) {
+                peripheralTextView.append("Data send successfully\n");
+                System.out.println(json.jsonArray.toString());
+            }
+
+            @Override
+            public void onFailure(int statusCode, Headers headers, String response, Throwable throwable) {
+                System.out.println(response);
+            }
+        });
+
     }
 }
