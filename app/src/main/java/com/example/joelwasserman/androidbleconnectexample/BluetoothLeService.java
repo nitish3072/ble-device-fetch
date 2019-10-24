@@ -71,7 +71,6 @@ public class BluetoothLeService extends Service {
         rh,
         air_quality,
         air_quality_accuracy,
-        pressure,
         dust
     }
 
