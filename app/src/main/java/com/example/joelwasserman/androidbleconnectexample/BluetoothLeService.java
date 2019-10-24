@@ -31,7 +31,10 @@ import com.codepath.asynchttpclient.callback.JsonHttpResponseHandler;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -57,7 +60,7 @@ public class BluetoothLeService extends Service {
     private static final int STATE_DISCONNECTED = 0;
     private static final int STATE_CONNECTING = 1;
     private static final int STATE_CONNECTED = 2;
-    static Map<String, String> serviceCharacteristicMap = new HashMap<>();
+    static Map<String, List<String>> serviceCharacteristicMap = new HashMap<>();
     static Map<String, ReadingType> characteristicUuidReadingTypeMap = new HashMap<>();
     private int serviceCharacteristicMapCounter = 0;
     public int counter=0;
@@ -67,15 +70,19 @@ public class BluetoothLeService extends Service {
         temp,
         rh,
         air_quality,
+        air_quality_accuracy,
         pressure,
-        sound_level;
+        dust
     }
 
     static {
-        serviceCharacteristicMap.put("0000181A-0000-1000-8000-00805F9B34FB", "00002A6E-0000-1000-8000-00805F9B34FB");
-        serviceCharacteristicMap.put("1BF8D02D-D56F-4D38-B068-D60D38637B46", "059621E8-B53C-40A7-A006-EF9AFCCFF870");
+        serviceCharacteristicMap.put("0000181A-0000-1000-8000-00805F9B34FB", new ArrayList<String>(Arrays.asList("00002A6E-0000-1000-8000-00805F9B34FB", "00002A6F-0000-1000-8000-00805F9B34FB")));
+        serviceCharacteristicMap.put("1BF8D02D-D56F-4D38-B068-D60D38637B46", new ArrayList<String>(Arrays.asList("059621E8-B53C-40A7-A006-EF9AFCCFF870", "4170C175-006F-4C07-8E3F-2AEB7312A788", "698427F4-410D-4DAB-A896-9806A8DFFC3B")));
         characteristicUuidReadingTypeMap.put("00002A6E-0000-1000-8000-00805F9B34FB", ReadingType.temp);
-        characteristicUuidReadingTypeMap.put("059621E8-B53C-40A7-A006-EF9AFCCFF870", ReadingType.rh);
+        characteristicUuidReadingTypeMap.put("00002A6F-0000-1000-8000-00805F9B34FB", ReadingType.rh);
+        characteristicUuidReadingTypeMap.put("059621E8-B53C-40A7-A006-EF9AFCCFF870", ReadingType.air_quality);
+        characteristicUuidReadingTypeMap.put("4170C175-006F-4C07-8E3F-2AEB7312A788", ReadingType.air_quality_accuracy);
+        characteristicUuidReadingTypeMap.put("698427F4-410D-4DAB-A896-9806A8DFFC3B", ReadingType.dust);
     }
 
     public final static String ACTION_GATT_CONNECTED =
@@ -219,9 +226,10 @@ public class BluetoothLeService extends Service {
         int index = 0;
         for(String service: serviceCharacteristicMap.keySet()) {
             if(index==serviceCharacteristicMapCounter) {
-                String characteristic = serviceCharacteristicMap.get(service);
-                System.out.println(createDescriptorsForCharacteristics(service, characteristic));
-                serviceCharacteristicMapCounter = serviceCharacteristicMapCounter >= serviceCharacteristicMap.size()-1 ? 0 : serviceCharacteristicMapCounter+1;
+                for(String characteristic: serviceCharacteristicMap.get(service)) {
+                    System.out.println(createDescriptorsForCharacteristics(service, characteristic));
+                    serviceCharacteristicMapCounter = serviceCharacteristicMapCounter >= serviceCharacteristicMap.size()-1 ? 0 : serviceCharacteristicMapCounter+1;
+                }
                 break;
             }
             index++;
@@ -263,6 +271,7 @@ public class BluetoothLeService extends Service {
         // After using a given device, you should make sure that BluetoothGatt.close() is called
         // such that resources are cleaned up properly.  In this particular example, close() is
         // invoked when the UI is disconnected from the Service.
+        Log.i("onUnbind called", "onUnBind called for our BLE service");
         Intent broadcastIntent = new Intent();
         broadcastIntent.setAction("restartservice");
         broadcastIntent.setClass(this, Restarter.class);
@@ -290,7 +299,7 @@ public class BluetoothLeService extends Service {
     public void onDestroy() {
         super.onDestroy();
         stoptimertask();
-
+        Log.i("onDestroy called", "onDestroy called for out BLE service");
         Intent broadcastIntent = new Intent();
         broadcastIntent.setAction("restartservice");
         broadcastIntent.setClass(this, Restarter.class);
