@@ -12,19 +12,26 @@ import android.bluetooth.BluetoothManager;
 import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanResult;
+import android.content.BroadcastReceiver;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.IBinder;
 import android.text.method.ScrollingMovementMethod;
+import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -47,9 +54,10 @@ import java.util.UUID;
 import okhttp3.Headers;
 import okhttp3.MediaType;
 import okhttp3.RequestBody;
+import  com.example.joelwasserman.androidbleconnectexample.BluetoothLeService;
 
 public class MainActivity extends AppCompatActivity {
-
+    BluetoothDevice btdevice;
     BluetoothManager btManager;
     BluetoothAdapter btAdapter;
     BluetoothLeScanner btScanner;
@@ -59,16 +67,19 @@ public class MainActivity extends AppCompatActivity {
     private final static int REQUEST_ENABLE_BT = 1;
     private static final int PERMISSION_REQUEST_COARSE_LOCATION = 1;
     private static final String deviceName = "EnliteZero";
-
+    public static final String EXTRAS_DEVICE_NAME = "DEVICE_NAME";
+    public static final String EXTRAS_DEVICE_ADDRESS = "DEVICE_ADDRESS";
+    private final String LIST_NAME = "NAME";
+    private final String LIST_UUID = "UUID";
+    private BluetoothLeService mBluetoothLeService;
     Boolean btScanning = false;
+    private String mDeviceAddress =null;
+    private  String mDeviceName =null;
     int deviceIndex = 0;
     ArrayList<BluetoothDevice> devicesDiscovered = new ArrayList<BluetoothDevice>();
-    static Map<String, String> serviceCharacteristicMap = new HashMap<>();
 
-    static {
-        serviceCharacteristicMap.put("0000181A-0000-1000-8000-00805F9B34FB", "00002A6E-0000-1000-8000-00805F9B34FB");
-        serviceCharacteristicMap.put("1bf8d02d-d56f-4d38-b068-d60d38637b46", "059621e8-b53c-40a7-a006-ef9afccff870");
-    }
+
+
 
     EditText deviceIndexInput;
     Button connectToDevice;
@@ -96,11 +107,26 @@ public class MainActivity extends AppCompatActivity {
      * See https://g.co/AppIndexing/AndroidStudio for more information.
      */
     private GoogleApiClient client;
+/*********************************/
+
+    /***************************/
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+        boolean isEnabled = bluetoothAdapter.isEnabled();
+        if (!isEnabled) {
+            bluetoothAdapter.enable();
+            printString("Bluetooth ON \n ");
+        }
+        else if(isEnabled) {
+            //bluetoothAdapter.disable();
+            printString("Bluetooth is already ON \n");
+        }
 
         peripheralTextView = (TextView) findViewById(R.id.PeripheralTextView);
         peripheralTextView.setMovementMethod(new ScrollingMovementMethod());
@@ -162,13 +188,14 @@ public class MainActivity extends AppCompatActivity {
         }
 
         client = new GoogleApiClient.Builder(this).addApi(AppIndex.API).build();
+
     }
 
     // Device scan callback.
     private ScanCallback leScanCallback = new ScanCallback() {
         @Override
         public void onScanResult(int callbackType, ScanResult result) {
-            peripheralTextView.append("Index: " + deviceIndex + ", Device Name: " + result.getDevice().getName() + " rssi: " + result.getRssi() + "\n");
+            peripheralTextView.append("Index: " + deviceIndex + ", Device Address: " + result.getDevice().getAddress() + " rssi: " + result.getRssi() + "\n");
             devicesDiscovered.add(result.getDevice());
             deviceIndex++;
             // auto scroll for text view
@@ -180,144 +207,9 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
-    // Device connect call back
-    private final BluetoothGattCallback btleGattCallback = new BluetoothGattCallback() {
 
-        @Override
-        public void onCharacteristicChanged(BluetoothGatt gatt, final BluetoothGattCharacteristic characteristic) {
-            // this will get called anytime you perform a read or write characteristic operation
-            Integer value = characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT16,0);
-            System.out.println("Characteristic discovered for service: " + value);
-            JSONObject jsonObject = new JSONObject();
-            try {
-                /**
-                 * {
-                 *    "fields" : {
-                 *     "by" : 1.0
-                 *    },
-                 *    "tags" : {
-                 *        "sensorID" : "sensorId",
-                 *        "equipment" :"110"
-                 *    },
-                 *    "time": 1571208265000
-                 * }
-                 */
-                JSONObject fields = new JSONObject();
-                fields.put("temp", Double.valueOf(value)/100);
-                JSONObject tags = new JSONObject();
-                fields.put("sensorID", "111111");
-                fields.put("equipment", "110");
-                jsonObject.put("fields", fields);
-                jsonObject.put("tags", tags);
-                jsonObject.put("time", System.currentTimeMillis());
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
-            sendApiRequestToServer(jsonObject);
-            MainActivity.this.runOnUiThread(new Runnable() {
-                public void run() {
-                    peripheralTextView.append("device read or wrote to\n" + characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT16,0));
-                }
-            });
-        }
 
-        @Override
-        public void onConnectionStateChange(final BluetoothGatt gatt, final int status, final int newState) {
-            // this will get called when a device connects or disconnects
-            System.out.println(newState);
-            switch (newState) {
-                case 0:
-                    MainActivity.this.runOnUiThread(new Runnable() {
-                        public void run() {
-                            peripheralTextView.append("device disconnected\n");
-                            connectToDevice.setVisibility(View.VISIBLE);
-                            disconnectDevice.setVisibility(View.INVISIBLE);
-                        }
-                    });
-                    break;
-                case 2:
-                    MainActivity.this.runOnUiThread(new Runnable() {
-                        public void run() {
-                            peripheralTextView.append("device connected\n");
-                            connectToDevice.setVisibility(View.INVISIBLE);
-                            disconnectDevice.setVisibility(View.VISIBLE);
-                        }
-                    });
 
-                    // discover services and characteristics for this device
-                    bluetoothGatt.discoverServices();
-
-                    break;
-                default:
-                    MainActivity.this.runOnUiThread(new Runnable() {
-                        public void run() {
-                            peripheralTextView.append("we encounterned an unknown state, uh oh\n");
-                        }
-                    });
-                    break;
-            }
-        }
-
-        @Override
-        public void onServicesDiscovered(final BluetoothGatt gatt, final int status) {
-            // this will get called after the client initiates a 			BluetoothGatt.discoverServices() call
-            MainActivity.this.runOnUiThread(new Runnable() {
-                public void run() {
-                    peripheralTextView.append("device services have been discovered\n");
-                }
-            });
-
-            createDescriptorsFromList();
-            // displayGattServices(bluetoothGatt.getService(UUID.fromString("0000181A-0000-1000-8000-00805F9B34FB")));
-        }
-
-        @Override
-        // Result of a characteristic read operation
-        public void onCharacteristicRead(BluetoothGatt gatt,
-                                         BluetoothGattCharacteristic characteristic,
-                                         int status) {
-            if (status == BluetoothGatt.GATT_SUCCESS) {
-                broadcastUpdate(ACTION_DATA_AVAILABLE, characteristic);
-            }
-        }
-
-        @Override
-        public void onDescriptorWrite(BluetoothGatt gatt, BluetoothGattDescriptor descriptor,
-                                      int status) {
-            createDescriptorsFromList();
-        }
-    };
-
-    private void createDescriptorsFromList() {
-        if(serviceCharacteristicMap.size()==0) {
-            return;
-        }
-        Map.Entry<String,String> entry = serviceCharacteristicMap.entrySet().iterator().next();
-        String service = entry.getKey();
-        String characteristic = entry.getValue();
-        System.out.println(createDescriptorsForCharacteristics(service, characteristic));
-        serviceCharacteristicMap.remove(service);
-    }
-
-    private boolean createDescriptorsForCharacteristics(String serviceUUID, String characteristicUUID) {
-        try {
-            Thread.sleep(2000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-        BluetoothGattCharacteristic characteristic = bluetoothGatt.getService(UUID.fromString(serviceUUID))
-                                                                  .getCharacteristic(UUID.fromString(characteristicUUID));
-        bluetoothGatt.setCharacteristicNotification(characteristic, Boolean.TRUE);
-        BluetoothGattDescriptor bluetoothGattDescriptor = characteristic.getDescriptor(UUID.fromString("00002902-0000-1000-8000-00805F9B34FB"));
-        bluetoothGattDescriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
-        return bluetoothGatt.writeDescriptor(bluetoothGattDescriptor);
-    }
-
-    private void broadcastUpdate(final String action,
-                                 final BluetoothGattCharacteristic characteristic) {
-
-        System.out.println(characteristic.getUuid());
-    }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String permissions[], int[] grantResults) {
@@ -333,8 +225,7 @@ public class MainActivity extends AppCompatActivity {
                     builder.setOnDismissListener(new DialogInterface.OnDismissListener() {
 
                         @Override
-                        public void onDismiss(DialogInterface dialog) {
-                        }
+                        public void onDismiss(DialogInterface dialog) { }
 
                     });
                     builder.show();
@@ -346,7 +237,7 @@ public class MainActivity extends AppCompatActivity {
 
     public void startScanning() {
         System.out.println("start scanning");
-        btScanning = true;
+       btScanning = true;
         deviceIndex = 0;
         devicesDiscovered.clear();
         peripheralTextView.setText("");
@@ -382,15 +273,17 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    public void connectToDeviceSelected() {
-        peripheralTextView.append("Trying to connect to device at index: " + deviceIndexInput.getText() + "\n");
-        int deviceSelected = Integer.parseInt(deviceIndexInput.getText().toString());
-        bluetoothGatt = devicesDiscovered.get(deviceSelected).connectGatt(this, false, btleGattCallback);
-    }
+//    public void connectToDeviceSelected() {
+//        peripheralTextView.append("Trying to connect to device at index: " + deviceIndexInput.getText() + "\n");
+//        int deviceSelected = Integer.parseInt(deviceIndexInput.getText().toString());
+//        bluetoothGatt = devicesDiscovered.get(deviceSelected).connectGatt(this, false, btleGattCallback);
+//    }
 
     public void disconnectDeviceSelected() {
         peripheralTextView.append("Disconnecting from device\n");
+        printString("Disconnecting from  device ");
         bluetoothGatt.disconnect();
+
     }
 
     @Override
@@ -429,26 +322,35 @@ public class MainActivity extends AppCompatActivity {
         client.disconnect();
     }
 
-    public void sendApiRequestToServer(JSONObject json) {
-        AsyncHttpClient client = new AsyncHttpClient();
+    public void connectToDeviceSelected() {
+        peripheralTextView.append("Trying to connect to device at index: " + deviceIndexInput.getText() + "\n");
+        int deviceSelected = Integer.parseInt(deviceIndexInput.getText().toString());
+        mDeviceAddress =devicesDiscovered.get(deviceSelected).getAddress().toString();
+        //smDeviceName =devicesDiscovered.get(deviceSelected).getName().toString();
+        btdevice = devicesDiscovered.get(deviceSelected);
+        printString("Address"+btdevice.getAddress());
 
-        RequestParams params = new RequestParams();
-        RequestHeaders requestHeaders = new RequestHeaders();
-        requestHeaders.put("x-auth-token", "token");
-        RequestBody body = RequestBody.create(MediaType.parse("application/json; charset=utf-8"), json.toString());
-
-        client.post("https://demo.dashboard.enliteresearch.com/dashboard/upsert/external/data", requestHeaders, params, body, new JsonHttpResponseHandler() {
-            @Override
-            public void onSuccess(int statusCode, Headers headers, JSON json) {
-                peripheralTextView.append("Data send successfully\n");
-                System.out.println(json.jsonArray.toString());
-            }
-
-            @Override
-            public void onFailure(int statusCode, Headers headers, String response, Throwable throwable) {
-                System.out.println(response);
-            }
-        });
+        Intent intent = new Intent(MainActivity.this,DeviceControlActivity.class);
+        intent.putExtra(MainActivity.EXTRAS_DEVICE_ADDRESS, mDeviceAddress);
+        //intent.putExtra(MainActivity.EXTRAS_DEVICE_NAME, mDeviceName);
+        //mBluetoothLeService.connect(btdevice);
+         startActivity(intent);
+        //mBluetoothLeService.connect(btdevice);
 
     }
+
+    /*Service */
+
+    public void printString(String str){
+        Toast toast = Toast.makeText(getApplicationContext(),
+               str,
+                Toast.LENGTH_SHORT);
+
+        toast.show();
+
+    }
+
+
+
+
 }
