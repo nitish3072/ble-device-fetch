@@ -79,7 +79,7 @@ public class MainActivity extends AppCompatActivity {
      */
     private GoogleApiClient client;
 
-    public MainActivity(BluetoothLeService mBluetoothLeService) {
+    public MainActivity() {
     }
 
     /*********************************/
