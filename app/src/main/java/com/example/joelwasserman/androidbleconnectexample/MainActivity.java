@@ -5,28 +5,19 @@ import android.app.AlertDialog;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
-import android.bluetooth.BluetoothGattCallback;
-import android.bluetooth.BluetoothGattCharacteristic;
-import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothManager;
 import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanResult;
-import android.content.BroadcastReceiver;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
-import android.content.IntentFilter;
-import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.IBinder;
 import android.text.method.ScrollingMovementMethod;
-import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
@@ -35,26 +26,13 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.codepath.asynchttpclient.AsyncHttpClient;
-import com.codepath.asynchttpclient.RequestHeaders;
-import com.codepath.asynchttpclient.RequestParams;
-import com.codepath.asynchttpclient.callback.JsonHttpResponseHandler;
 import com.google.android.gms.appindexing.Action;
 import com.google.android.gms.appindexing.AppIndex;
 import com.google.android.gms.common.api.GoogleApiClient;
 
-import org.json.JSONException;
-import org.json.JSONObject;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
-
-import okhttp3.Headers;
-import okhttp3.MediaType;
-import okhttp3.RequestBody;
-import  com.example.joelwasserman.androidbleconnectexample.BluetoothLeService;
 
 public class MainActivity extends AppCompatActivity {
     BluetoothDevice btdevice;
@@ -67,19 +45,12 @@ public class MainActivity extends AppCompatActivity {
     private final static int REQUEST_ENABLE_BT = 1;
     private static final int PERMISSION_REQUEST_COARSE_LOCATION = 1;
     private static final String deviceName = "EnliteZero";
-    public static final String EXTRAS_DEVICE_NAME = "DEVICE_NAME";
     public static final String EXTRAS_DEVICE_ADDRESS = "DEVICE_ADDRESS";
-    private final String LIST_NAME = "NAME";
-    private final String LIST_UUID = "UUID";
-    private BluetoothLeService mBluetoothLeService;
     Boolean btScanning = false;
     private String mDeviceAddress =null;
     private  String mDeviceName =null;
     int deviceIndex = 0;
     ArrayList<BluetoothDevice> devicesDiscovered = new ArrayList<BluetoothDevice>();
-
-
-
 
     EditText deviceIndexInput;
     Button connectToDevice;
@@ -107,7 +78,11 @@ public class MainActivity extends AppCompatActivity {
      * See https://g.co/AppIndexing/AndroidStudio for more information.
      */
     private GoogleApiClient client;
-/*********************************/
+
+    public MainActivity(BluetoothLeService mBluetoothLeService) {
+    }
+
+    /*********************************/
 
     /***************************/
 
@@ -237,7 +212,7 @@ public class MainActivity extends AppCompatActivity {
 
     public void startScanning() {
         System.out.println("start scanning");
-       btScanning = true;
+        btScanning = true;
         deviceIndex = 0;
         devicesDiscovered.clear();
         peripheralTextView.setText("");
@@ -272,12 +247,6 @@ public class MainActivity extends AppCompatActivity {
             }
         });
     }
-
-//    public void connectToDeviceSelected() {
-//        peripheralTextView.append("Trying to connect to device at index: " + deviceIndexInput.getText() + "\n");
-//        int deviceSelected = Integer.parseInt(deviceIndexInput.getText().toString());
-//        bluetoothGatt = devicesDiscovered.get(deviceSelected).connectGatt(this, false, btleGattCallback);
-//    }
 
     public void disconnectDeviceSelected() {
         peripheralTextView.append("Disconnecting from device\n");
@@ -326,24 +295,19 @@ public class MainActivity extends AppCompatActivity {
         peripheralTextView.append("Trying to connect to device at index: " + deviceIndexInput.getText() + "\n");
         int deviceSelected = Integer.parseInt(deviceIndexInput.getText().toString());
         mDeviceAddress =devicesDiscovered.get(deviceSelected).getAddress().toString();
-        //smDeviceName =devicesDiscovered.get(deviceSelected).getName().toString();
         btdevice = devicesDiscovered.get(deviceSelected);
         printString("Address"+btdevice.getAddress());
 
         Intent intent = new Intent(MainActivity.this,DeviceControlActivity.class);
         intent.putExtra(MainActivity.EXTRAS_DEVICE_ADDRESS, mDeviceAddress);
-        //intent.putExtra(MainActivity.EXTRAS_DEVICE_NAME, mDeviceName);
-        //mBluetoothLeService.connect(btdevice);
-         startActivity(intent);
-        //mBluetoothLeService.connect(btdevice);
-
+        startActivity(intent);
     }
 
     /*Service */
 
     public void printString(String str){
         Toast toast = Toast.makeText(getApplicationContext(),
-               str,
+                str,
                 Toast.LENGTH_SHORT);
 
         toast.show();

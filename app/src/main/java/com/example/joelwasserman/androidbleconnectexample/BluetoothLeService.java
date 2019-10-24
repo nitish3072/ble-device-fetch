@@ -1,5 +1,8 @@
 package com.example.joelwasserman.androidbleconnectexample;
 
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.app.Service;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
@@ -7,33 +10,31 @@ import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCallback;
 import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothGattDescriptor;
-import android.bluetooth.BluetoothGattService;
 import android.bluetooth.BluetoothManager;
-import android.bluetooth.BluetoothProfile;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Color;
 import android.os.Binder;
-import android.os.Handler;
+import android.os.Build;
 import android.os.IBinder;
 import android.util.Log;
-import android.view.View;
-import android.widget.Toast;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.RequiresApi;
+import androidx.core.app.NotificationCompat;
 
 import com.codepath.asynchttpclient.AsyncHttpClient;
 import com.codepath.asynchttpclient.RequestHeaders;
 import com.codepath.asynchttpclient.RequestParams;
 import com.codepath.asynchttpclient.callback.JsonHttpResponseHandler;
-import com.google.android.gms.common.api.GoogleApiClient;
 
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.UUID;
 
 import okhttp3.Headers;
@@ -56,34 +57,26 @@ public class BluetoothLeService extends Service {
     private static final int STATE_DISCONNECTED = 0;
     private static final int STATE_CONNECTING = 1;
     private static final int STATE_CONNECTED = 2;
-    Boolean btScanning = false;
-    int deviceIndex = 0;
-    ArrayList<BluetoothDevice> devicesDiscovered = new ArrayList<BluetoothDevice>();
     static Map<String, String> serviceCharacteristicMap = new HashMap<>();
     static Map<String, ReadingType> characteristicUuidReadingTypeMap = new HashMap<>();
+    private int serviceCharacteristicMapCounter = 0;
+    public int counter=0;
 
 
     private enum ReadingType {
         temp,
         rh,
+        air_quality,
+        pressure,
         sound_level;
     }
 
     static {
         serviceCharacteristicMap.put("0000181A-0000-1000-8000-00805F9B34FB", "00002A6E-0000-1000-8000-00805F9B34FB");
-        serviceCharacteristicMap.put("1bf8d02d-d56f-4d38-b068-d60d38637b46", "059621e8-b53c-40a7-a006-ef9afccff870");
+        serviceCharacteristicMap.put("1BF8D02D-D56F-4D38-B068-D60D38637B46", "059621E8-B53C-40A7-A006-EF9AFCCFF870");
         characteristicUuidReadingTypeMap.put("00002A6E-0000-1000-8000-00805F9B34FB", ReadingType.temp);
-        characteristicUuidReadingTypeMap.put("059621e8-b53c-40a7-a006-ef9afccff870", ReadingType.rh);
+        characteristicUuidReadingTypeMap.put("059621E8-B53C-40A7-A006-EF9AFCCFF870", ReadingType.rh);
     }
-
-
-    public Map<String, String> uuids = new HashMap<String, String>();
-
-    // Stops scanning after 5 seconds.
-    private Handler mHandler = new Handler();
-    private static final long SCAN_PERIOD = 5000;
-    private GoogleApiClient client;
-
 
     public final static String ACTION_GATT_CONNECTED =
             "com.example.bluetooth.le.ACTION_GATT_CONNECTED";
@@ -95,10 +88,6 @@ public class BluetoothLeService extends Service {
             "com.example.bluetooth.le.ACTION_DATA_AVAILABLE";
     public final static String EXTRA_DATA =
             "com.example.bluetooth.le.EXTRA_DATA";
-
-    public final static UUID MY_UUID =
-            UUID.fromString("00002902-0000-1000-8000-00805F9B34FB");
-
 
     /*****************************/
 
@@ -142,7 +131,7 @@ public class BluetoothLeService extends Service {
         public void onCharacteristicChanged(BluetoothGatt gatt, final BluetoothGattCharacteristic characteristic) {
             // this will get called anytime you perform a read or write characteristic operation
             Integer value = characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT16, 0);
-            System.out.println("Characteristic discovered for service: " + value);
+            System.out.println("Characteristic " + characteristic.getUuid() + " discovered for service: " + value);
             JSONObject jsonObject = new JSONObject();
             try {
                 /**
@@ -158,7 +147,7 @@ public class BluetoothLeService extends Service {
                  * }
                  */
                 JSONObject fields = new JSONObject();
-                fields.put(characteristicUuidReadingTypeMap.get(characteristic.getUuid().toString()).toString(), Double.valueOf(value)/100);
+                fields.put(characteristicUuidReadingTypeMap.get(characteristic.getUuid().toString().toUpperCase()).toString(), Double.valueOf(value)/100);
                 JSONObject tags = new JSONObject();
                 tags.put("sensorID", mBluetoothGatt.getDevice().getName());
                 tags.put("equipment", "110");
@@ -227,11 +216,16 @@ public class BluetoothLeService extends Service {
         if (serviceCharacteristicMap.size() == 0) {
             return;
         }
-        Map.Entry<String, String> entry = serviceCharacteristicMap.entrySet().iterator().next();
-        String service = entry.getKey();
-        String characteristic = entry.getValue();
-        System.out.println(createDescriptorsForCharacteristics(service, characteristic));
-        serviceCharacteristicMap.remove(service);
+        int index = 0;
+        for(String service: serviceCharacteristicMap.keySet()) {
+            if(index==serviceCharacteristicMapCounter) {
+                String characteristic = serviceCharacteristicMap.get(service);
+                System.out.println(createDescriptorsForCharacteristics(service, characteristic));
+                serviceCharacteristicMapCounter = serviceCharacteristicMapCounter >= serviceCharacteristicMap.size()-1 ? 0 : serviceCharacteristicMapCounter+1;
+                break;
+            }
+            index++;
+        };
     }
 
 
@@ -269,8 +263,80 @@ public class BluetoothLeService extends Service {
         // After using a given device, you should make sure that BluetoothGatt.close() is called
         // such that resources are cleaned up properly.  In this particular example, close() is
         // invoked when the UI is disconnected from the Service.
-        close();
+        Intent broadcastIntent = new Intent();
+        broadcastIntent.setAction("restartservice");
+        broadcastIntent.setClass(this, Restarter.class);
+        this.sendBroadcast(broadcastIntent);
         return super.onUnbind(intent);
+    }
+
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        super.onStartCommand(intent, flags, startId);
+        startTimer();
+        return START_STICKY;
+    }
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.O)
+            startMyOwnForeground();
+        else
+            startForeground(1, new Notification());
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        stoptimertask();
+
+        Intent broadcastIntent = new Intent();
+        broadcastIntent.setAction("restartservice");
+        broadcastIntent.setClass(this, Restarter.class);
+        this.sendBroadcast(broadcastIntent);
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    private void startMyOwnForeground()
+    {
+        String NOTIFICATION_CHANNEL_ID = "example.permanence";
+        String channelName = "Background Service";
+        NotificationChannel chan = new NotificationChannel(NOTIFICATION_CHANNEL_ID, channelName, NotificationManager.IMPORTANCE_HIGH);
+        chan.setLightColor(Color.BLUE);
+        chan.setLockscreenVisibility(Notification.VISIBILITY_PRIVATE);
+
+        NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        assert manager != null;
+        manager.createNotificationChannel(chan);
+
+        NotificationCompat.Builder notificationBuilder = new NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID);
+        Notification notification = notificationBuilder.setOngoing(true)
+                .setContentTitle("Ola app running in background")
+                .setPriority(NotificationManager.IMPORTANCE_HIGH)
+                .setSmallIcon(R.drawable.common_full_open_on_phone)
+                .setCategory(Notification.CATEGORY_SERVICE)
+                .build();
+        startForeground(2, notification);
+    }
+
+    private Timer timer;
+    private TimerTask timerTask;
+    public void startTimer() {
+        timer = new Timer();
+        timerTask = new TimerTask() {
+            public void run() {
+                Log.i("Count", "=========  "+ (counter++));
+            }
+        };
+        timer.schedule(timerTask, 1000, 1000); //
+    }
+
+    public void stoptimertask() {
+        if (timer != null) {
+            timer.cancel();
+            timer = null;
+        }
     }
 
     public void close() {
@@ -302,7 +368,7 @@ public class BluetoothLeService extends Service {
     }
 
     public boolean connect(final String address) {
-         printString("Connect");
+        printString("Connect");
         if (mBluetoothAdapter == null || address == null) {
             Log.w(TAG, "BluetoothAdapter not initialized or unspecified address.");
             return false;
@@ -332,7 +398,7 @@ public class BluetoothLeService extends Service {
         // We want to directly connect to the device, so we are setting the autoConnect
         // parameter to false.
         printString("new connection ");
-        mBluetoothGatt = device.connectGatt(this, false, btleGattCallback);
+        mBluetoothGatt = device.connectGatt(this, true, btleGattCallback);
         Log.d(TAG, "Trying to create a new connection.");
         printString("Trying to create a new connection ");
         mBluetoothDeviceAddress = address;
