@@ -6,3 +6,48 @@
 .DS_Store
 /build
 /captures
+/.idea
+/target/
+/logs/
+/.project
+
+.springBeans
+/bin/
+src/main/main.iml
+src/test/
+# Eclipse
+.classpath
+.project
+.settings/
+
+# Intellij
+.idea/
+*.iml
+*.iws
+
+# Maven
+log/
+target/
+
+# Ignore Play! working directory #
+.eclipse
+/project/project
+/project/target
+/target
+tmp/
+test-result
+server.pid
+*.eml
+/dist/
+.cache
+.idea/
+
+# OS generated files #
+######################
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
