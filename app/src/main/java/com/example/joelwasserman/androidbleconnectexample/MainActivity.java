@@ -195,7 +195,7 @@ public class MainActivity extends AppCompatActivity {
     private ScanCallback leScanCallback = new ScanCallback() {
         @Override
         public void onScanResult(int callbackType, ScanResult result) {
-            peripheralTextView.append("Index: " + deviceIndex + ", Device Address: " + result.getDevice().getAddress() + " rssi: " + result.getRssi() + "\n");
+            peripheralTextView.append("Index: " + deviceIndex + ", Device Address: " + result.getDevice().getName() + " rssi: " + result.getRssi() + "\n");
             devicesDiscovered.add(result.getDevice());
             deviceIndex++;
             // auto scroll for text view

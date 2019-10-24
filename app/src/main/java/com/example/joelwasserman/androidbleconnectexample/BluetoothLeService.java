@@ -60,11 +60,22 @@ public class BluetoothLeService extends Service {
     int deviceIndex = 0;
     ArrayList<BluetoothDevice> devicesDiscovered = new ArrayList<BluetoothDevice>();
     static Map<String, String> serviceCharacteristicMap = new HashMap<>();
+    static Map<String, ReadingType> characteristicUuidReadingTypeMap = new HashMap<>();
+
+
+    private enum ReadingType {
+        temp,
+        rh,
+        sound_level;
+    }
 
     static {
         serviceCharacteristicMap.put("0000181A-0000-1000-8000-00805F9B34FB", "00002A6E-0000-1000-8000-00805F9B34FB");
         serviceCharacteristicMap.put("1bf8d02d-d56f-4d38-b068-d60d38637b46", "059621e8-b53c-40a7-a006-ef9afccff870");
+        characteristicUuidReadingTypeMap.put("00002A6E-0000-1000-8000-00805F9B34FB", ReadingType.temp);
+        characteristicUuidReadingTypeMap.put("059621e8-b53c-40a7-a006-ef9afccff870", ReadingType.rh);
     }
+
 
     public Map<String, String> uuids = new HashMap<String, String>();
 
@@ -92,13 +103,11 @@ public class BluetoothLeService extends Service {
     /*****************************/
 
 
-    public void printString(String str) {
-        Toast toast = Toast.makeText(getApplicationContext(),
-                str,
-                Toast.LENGTH_SHORT);
-
-        toast.show();
-
+    public void printString(final String str) {
+//        Toast toast = Toast.makeText(getApplicationContext(),
+//                str,
+//                Toast.LENGTH_SHORT);
+//        toast.show();
     }
 
     public void sendApiRequestToServer(JSONObject json) {
@@ -149,10 +158,10 @@ public class BluetoothLeService extends Service {
                  * }
                  */
                 JSONObject fields = new JSONObject();
-                fields.put("temp", Double.valueOf(value) / 100);
+                fields.put(characteristicUuidReadingTypeMap.get(characteristic.getUuid().toString()).toString(), Double.valueOf(value)/100);
                 JSONObject tags = new JSONObject();
-                fields.put("sensorID", "111111");
-                fields.put("equipment", "110");
+                tags.put("sensorID", mBluetoothGatt.getDevice().getName());
+                tags.put("equipment", "110");
                 jsonObject.put("fields", fields);
                 jsonObject.put("tags", tags);
                 jsonObject.put("time", System.currentTimeMillis());
@@ -160,11 +169,6 @@ public class BluetoothLeService extends Service {
                 e.printStackTrace();
             }
             sendApiRequestToServer(jsonObject);
-//            MainActivity.this.runOnUiThread(new Runnable() {
-//                public void run() {
-//                   // peripheralTextView.append("device read or wrote to\n" + characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT16,0));
-//                }
-//            });
         }
 
         @Override
@@ -173,35 +177,15 @@ public class BluetoothLeService extends Service {
             System.out.println(newState);
             switch (newState) {
                 case 0:
-//                    MainActivity.this.runOnUiThread(new Runnable() {
-//                        public void run() {
-//                            peripheralTextView.append("device disconnected\n");
-//                            connectToDevice.setVisibility(View.VISIBLE);
-//                            disconnectDevice.setVisibility(View.INVISIBLE);
-//                        }
-//                    });
                     printString("device disconnected");
                     break;
                 case 2:
-//                    MainActivity.this.runOnUiThread(new Runnable() {
-//                        public void run() {
-//                            peripheralTextView.append("device connected\n");
-//                            connectToDevice.setVisibility(View.INVISIBLE);
-//                            disconnectDevice.setVisibility(View.VISIBLE);
-//                        }
-//                    });
                     printString("Device Connected");
 
                     // discover services and characteristics for this device
                     mBluetoothGatt.discoverServices();
-
                     break;
                 default:
-//                    MainActivity.this.runOnUiThread(new Runnable() {
-//                        public void run() {
-//                            peripheralTextView.append("we encounterned an unknown state, uh oh\n");
-//                        }
-//                    });
                     printString("we encounterned an unknown state, uh oh\\n");
                     break;
             }
@@ -209,15 +193,7 @@ public class BluetoothLeService extends Service {
 
         @Override
         public void onServicesDiscovered(final BluetoothGatt gatt, final int status) {
-            // this will get called after the client initiates a 			BluetoothGatt.discoverServices() call
-//            MainActivity.this.runOnUiThread(new Runnable() {
-//                public void run() {
-//                    //peripheralTextView.append("device services have been discovered\n");
-//                }
-//            });
-
             createDescriptorsFromList();
-            // displayGattServices(bluetoothGatt.getService(UUID.fromString("0000181A-0000-1000-8000-00805F9B34FB")));
         }
 
         @Override
