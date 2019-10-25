@@ -65,6 +65,8 @@ public class BluetoothLeService extends Service {
     private int serviceCharacteristicMapCounter = 0;
     public int counter=0;
 
+    public static final String SERVER_URL = "https://demo.dashboard.enliteresearch.com/dashboard/upsert/external/data";
+
 
     private enum ReadingType {
         temp,
@@ -113,7 +115,7 @@ public class BluetoothLeService extends Service {
         requestHeaders.put("x-auth-token", "token");
         RequestBody body = RequestBody.create(MediaType.parse("application/json; charset=utf-8"), json.toString());
 
-        client.post("https://demo.dashboard.enliteresearch.com/dashboard/upsert/external/data", requestHeaders, params, body, new JsonHttpResponseHandler() {
+        client.post(SERVER_URL, requestHeaders, params, body, new JsonHttpResponseHandler() {
             @Override
             public void onSuccess(int statusCode, Headers headers, JSON json) {
                 // peripheralTextView.append("Data send successfully\n");
