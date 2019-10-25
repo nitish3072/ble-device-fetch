@@ -72,7 +72,7 @@ public class BluetoothLeService extends Service {
         temp,
         rh,
         air_quality,
-        air_quality_accuracy,
+        data_accuracy,
         dust
     }
 
@@ -82,7 +82,7 @@ public class BluetoothLeService extends Service {
         characteristicUuidReadingTypeMap.put("00002A6E-0000-1000-8000-00805F9B34FB", ReadingType.temp);
         characteristicUuidReadingTypeMap.put("00002A6F-0000-1000-8000-00805F9B34FB", ReadingType.rh);
         characteristicUuidReadingTypeMap.put("059621E8-B53C-40A7-A006-EF9AFCCFF870", ReadingType.air_quality);
-        characteristicUuidReadingTypeMap.put("4170C175-006F-4C07-8E3F-2AEB7312A788", ReadingType.air_quality_accuracy);
+        characteristicUuidReadingTypeMap.put("4170C175-006F-4C07-8E3F-2AEB7312A788", ReadingType.data_accuracy);
         characteristicUuidReadingTypeMap.put("698427F4-410D-4DAB-A896-9806A8DFFC3B", ReadingType.dust);
     }
 
