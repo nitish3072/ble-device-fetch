@@ -60,30 +60,50 @@ public class BluetoothLeService extends Service {
     private static final int STATE_DISCONNECTED = 0;
     private static final int STATE_CONNECTING = 1;
     private static final int STATE_CONNECTED = 2;
-    static Map<String, List<String>> serviceCharacteristicMap = new HashMap<>();
+    static List<ServiceCharacteristic> serviceCharacteristicList = new ArrayList<>();
     static Map<String, ReadingType> characteristicUuidReadingTypeMap = new HashMap<>();
     private int serviceCharacteristicMapCounter = 0;
     public int counter=0;
 
-    public static final String SERVER_URL = "https://demo.dashboard.enliteresearch.com/dashboard/upsert/external/data";
+    public static final String SERVER_URL = "https://olacabs.dashboard.enliteresearch.com/dashboard/upsert/external/data";
 
+    class ServiceCharacteristic {
+        private String serviceId;
+        private String characterticId;
 
-    private enum ReadingType {
-        temp,
-        rh,
-        air_quality,
-        data_accuracy,
-        dust
+        public ServiceCharacteristic(String serviceId, String characterticId) {
+            this.serviceId = serviceId;
+            this.characterticId = characterticId;
+        }
+
+        public String getServiceId() {
+            return serviceId;
+        }
+
+        public void setServiceId(String serviceId) {
+            this.serviceId = serviceId;
+        }
+
+        public String getCharacterticId() {
+            return characterticId;
+        }
+
+        public void setCharacterticId(String characterticId) {
+            this.characterticId = characterticId;
+        }
     }
 
-    static {
-        serviceCharacteristicMap.put("0000181A-0000-1000-8000-00805F9B34FB", new ArrayList<String>(Arrays.asList("00002A6E-0000-1000-8000-00805F9B34FB", "00002A6F-0000-1000-8000-00805F9B34FB")));
-        serviceCharacteristicMap.put("1BF8D02D-D56F-4D38-B068-D60D38637B46", new ArrayList<String>(Arrays.asList("059621E8-B53C-40A7-A006-EF9AFCCFF870", "4170C175-006F-4C07-8E3F-2AEB7312A788", "698427F4-410D-4DAB-A896-9806A8DFFC3B")));
-        characteristicUuidReadingTypeMap.put("00002A6E-0000-1000-8000-00805F9B34FB", ReadingType.temp);
-        characteristicUuidReadingTypeMap.put("00002A6F-0000-1000-8000-00805F9B34FB", ReadingType.rh);
-        characteristicUuidReadingTypeMap.put("059621E8-B53C-40A7-A006-EF9AFCCFF870", ReadingType.air_quality);
-        characteristicUuidReadingTypeMap.put("4170C175-006F-4C07-8E3F-2AEB7312A788", ReadingType.data_accuracy);
-        characteristicUuidReadingTypeMap.put("698427F4-410D-4DAB-A896-9806A8DFFC3B", ReadingType.dust);
+    private enum ReadingType {
+        temp(100),
+        rh(100),
+        air_quality(100),
+        data_accuracy(1),
+        dust(100);
+
+        int multiplyingFactor;
+        ReadingType(Integer multiplyingFactor) {
+            this.multiplyingFactor = multiplyingFactor;
+        }
     }
 
     public final static String ACTION_GATT_CONNECTED =
@@ -112,7 +132,7 @@ public class BluetoothLeService extends Service {
 
         RequestParams params = new RequestParams();
         RequestHeaders requestHeaders = new RequestHeaders();
-        requestHeaders.put("x-auth-token", "token");
+        requestHeaders.put("x-auth-token", "w7S8NsSyZUKbKGwNb6v0Dw2xMxJdTc8e");
         RequestBody body = RequestBody.create(MediaType.parse("application/json; charset=utf-8"), json.toString());
 
         client.post(SERVER_URL, requestHeaders, params, body, new JsonHttpResponseHandler() {
@@ -155,10 +175,10 @@ public class BluetoothLeService extends Service {
                  * }
                  */
                 JSONObject fields = new JSONObject();
-                fields.put(characteristicUuidReadingTypeMap.get(characteristic.getUuid().toString().toUpperCase()).toString(), Double.valueOf(value)/100);
+                fields.put(characteristicUuidReadingTypeMap.get(characteristic.getUuid().toString().toUpperCase()).toString(), Double.valueOf(value)/characteristicUuidReadingTypeMap.get(characteristic.getUuid().toString().toUpperCase()).multiplyingFactor);
                 JSONObject tags = new JSONObject();
                 tags.put("sensorID", mBluetoothGatt.getDevice().getName());
-                tags.put("equipment", "110");
+//                tags.put("equipment", "110");
                 jsonObject.put("fields", fields);
                 jsonObject.put("tags", tags);
                 jsonObject.put("time", System.currentTimeMillis());
@@ -220,21 +240,19 @@ public class BluetoothLeService extends Service {
 // Device connect call back
 
 
-    private void createDescriptorsFromList() {
-        if (serviceCharacteristicMap.size() == 0) {
+    private synchronized void createDescriptorsFromList() {
+        if (serviceCharacteristicList.size() == 0) {
             return;
         }
         int index = 0;
-        for(String service: serviceCharacteristicMap.keySet()) {
+        for(ServiceCharacteristic serviceCharacteristic: serviceCharacteristicList) {
             if(index==serviceCharacteristicMapCounter) {
-                for(String characteristic: serviceCharacteristicMap.get(service)) {
-                    System.out.println(createDescriptorsForCharacteristics(service, characteristic));
-                    serviceCharacteristicMapCounter = serviceCharacteristicMapCounter >= serviceCharacteristicMap.size()-1 ? 0 : serviceCharacteristicMapCounter+1;
-                }
+                System.out.println(createDescriptorsForCharacteristics(serviceCharacteristic.getServiceId(), serviceCharacteristic.getCharacterticId()));
+                serviceCharacteristicMapCounter = serviceCharacteristicMapCounter >= serviceCharacteristicList.size()-1 ? 0 : serviceCharacteristicMapCounter+1;
                 break;
             }
             index++;
-        };
+        }
     }
 
 
@@ -358,6 +376,17 @@ public class BluetoothLeService extends Service {
     }
 
     public boolean initialize() {
+        serviceCharacteristicList.add(new ServiceCharacteristic("0000181A-0000-1000-8000-00805F9B34FB", "00002A6E-0000-1000-8000-00805F9B34FB"));
+        serviceCharacteristicList.add(new ServiceCharacteristic("0000181A-0000-1000-8000-00805F9B34FB", "00002A6F-0000-1000-8000-00805F9B34FB"));
+        serviceCharacteristicList.add(new ServiceCharacteristic("1BF8D02D-D56F-4D38-B068-D60D38637B46", "059621E8-B53C-40A7-A006-EF9AFCCFF870"));
+        serviceCharacteristicList.add(new ServiceCharacteristic("1BF8D02D-D56F-4D38-B068-D60D38637B46", "4170C175-006F-4C07-8E3F-2AEB7312A788"));
+        serviceCharacteristicList.add(new ServiceCharacteristic("1BF8D02D-D56F-4D38-B068-D60D38637B46", "698427F4-410D-4DAB-A896-9806A8DFFC3B"));
+        characteristicUuidReadingTypeMap.put("00002A6E-0000-1000-8000-00805F9B34FB", ReadingType.temp);
+        characteristicUuidReadingTypeMap.put("00002A6F-0000-1000-8000-00805F9B34FB", ReadingType.rh);
+        characteristicUuidReadingTypeMap.put("059621E8-B53C-40A7-A006-EF9AFCCFF870", ReadingType.air_quality);
+        characteristicUuidReadingTypeMap.put("4170C175-006F-4C07-8E3F-2AEB7312A788", ReadingType.data_accuracy);
+        characteristicUuidReadingTypeMap.put("698427F4-410D-4DAB-A896-9806A8DFFC3B", ReadingType.dust);
+
         // For API level 18 and above, get a reference to BluetoothAdapter through
         // BluetoothManager.
         if (mBluetoothManager == null) {
