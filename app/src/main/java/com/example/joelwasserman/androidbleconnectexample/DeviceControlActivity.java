@@ -8,17 +8,27 @@ import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.text.method.ScrollingMovementMethod;
 import android.view.View;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
+
+import static android.app.PendingIntent.getActivity;
 
 public class DeviceControlActivity extends AppCompatActivity {
 
     public static final String EXTRAS_DEVICE_ADDRESS = "DEVICE_ADDRESS";
+    public static final String EXTRAS_DEVICE_NAME = "DEVICE_NAME";
+    TextView connectTextView;
+    TextView peripheralTextView;
 
     private String mDeviceAddress;
+    private String mDeviceName;
     private BluetoothLeService mBluetoothLeService;
+
     private final ServiceConnection  mServiceConnection = new ServiceConnection() {
 
         @Override
@@ -59,6 +69,23 @@ public class DeviceControlActivity extends AppCompatActivity {
                 //displayGattServices(mBluetoothLeService.getSupportedGattServices());
             } else if (BluetoothLeService.ACTION_DATA_AVAILABLE.equals(action)) {
                 printString(intent.getStringExtra(BluetoothLeService.EXTRA_DATA));
+            }
+        }
+    };
+
+    private BroadcastReceiver mMessageReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            // Get extra data included in the Intent
+            String message = intent.getStringExtra("MESSAGE");
+            if (message != null) {
+                peripheralTextView.append(message + "\n");
+                // auto scroll for text view
+                final int scrollAmount = peripheralTextView.getLayout().getLineTop(peripheralTextView.getLineCount()) - peripheralTextView.getHeight();
+                // if there is no need to scroll, scrollAmount will be <=0
+                if (scrollAmount > 0) {
+                    peripheralTextView.scrollTo(0, scrollAmount);
+                }
             }
         }
     };
@@ -122,23 +149,30 @@ public class DeviceControlActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        LocalBroadcastManager.getInstance(this).registerReceiver(
+                mMessageReceiver, new IntentFilter("sendDataToActivity"));
         setContentView(R.layout.activity_device_control);
+        peripheralTextView = (TextView) findViewById(R.id.PeripheralDeviceTextView);
+        peripheralTextView.setMovementMethod(new ScrollingMovementMethod());
+        peripheralTextView.setText("");
+        peripheralTextView.append("Data will flow here\n");
+
         final Intent intent = getIntent();
         mDeviceAddress = intent.getStringExtra(EXTRAS_DEVICE_ADDRESS);
+        mDeviceName = intent.getStringExtra(EXTRAS_DEVICE_NAME);
+        connectTextView = (TextView) findViewById(R.id.connectedTo);
+        connectTextView.setText("Connected to: "+mDeviceName);
         printString("address of device"+mDeviceAddress);
         Intent gattServiceIntent = new Intent(this, BluetoothLeService.class);
         bindService(gattServiceIntent, mServiceConnection, BIND_AUTO_CREATE);
     }
 
-    public void connectDevice(View view) {
-        printString("Hello " +mDeviceAddress);
-
-//      if(mBluetoothLeService.connect(mDeviceAddress)){
-//           printString("Connect \n");
-//       }
-//      else{
-//           printString("Disconnect \n");
-//       }
+    public void disconnectDevice(View view) {
+        printString("Disconnecting device: " +mDeviceAddress);
+        if(mBluetoothLeService!=null) {
+            mBluetoothLeService.dontRestart();
+        }
+        finish();
     }
 
 

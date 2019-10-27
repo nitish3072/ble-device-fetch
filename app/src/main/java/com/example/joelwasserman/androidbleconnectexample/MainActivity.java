@@ -4,7 +4,6 @@ import android.Manifest;
 import android.app.AlertDialog;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
-import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothManager;
 import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
@@ -17,11 +16,10 @@ import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
-import android.text.method.ScrollingMovementMethod;
 import android.view.View;
+import android.widget.AdapterView;
 import android.widget.Button;
-import android.widget.EditText;
-import android.widget.TextView;
+import android.widget.ListView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -41,21 +39,14 @@ public class MainActivity extends AppCompatActivity {
     BluetoothLeScanner btScanner;
     Button startScanningButton;
     Button stopScanningButton;
-    TextView peripheralTextView;
+    ListView peripheralTextView;
     private final static int REQUEST_ENABLE_BT = 1;
     private static final int PERMISSION_REQUEST_COARSE_LOCATION = 1;
-    private static final String deviceName = "EnliteZero";
+    private static final String deviceName = "OLASENSOR";
     public static final String EXTRAS_DEVICE_ADDRESS = "DEVICE_ADDRESS";
+    public static final String EXTRAS_DEVICE_NAME = "DEVICE_NAME";
     Boolean btScanning = false;
-    private String mDeviceAddress =null;
-    private  String mDeviceName =null;
     int deviceIndex = 0;
-    ArrayList<BluetoothDevice> devicesDiscovered = new ArrayList<BluetoothDevice>();
-
-    EditText deviceIndexInput;
-    Button connectToDevice;
-    Button disconnectDevice;
-    BluetoothGatt bluetoothGatt;
 
     public final static String ACTION_GATT_CONNECTED =
             "com.example.bluetooth.le.ACTION_GATT_CONNECTED";
@@ -78,6 +69,22 @@ public class MainActivity extends AppCompatActivity {
      * See https://g.co/AppIndexing/AndroidStudio for more information.
      */
     private GoogleApiClient client;
+
+    ArrayList<Device> arrayOfDevices = new ArrayList<Device>();
+    DeviceAdapter deviceAdapter = null;
+    public class Device {
+        public String name;
+        public String address;
+
+        public Device(String name, String address) {
+            this.name = name;
+            this.address = address;
+        }
+
+        public Device() {
+
+        }
+    }
 
     public MainActivity() {
     }
@@ -103,32 +110,28 @@ public class MainActivity extends AppCompatActivity {
             printString("Bluetooth is already ON \n");
         }
 
-        peripheralTextView = (TextView) findViewById(R.id.PeripheralTextView);
-        peripheralTextView.setMovementMethod(new ScrollingMovementMethod());
-        deviceIndexInput = (EditText) findViewById(R.id.InputIndex);
-        deviceIndexInput.setText("0");
-
-        connectToDevice = (Button) findViewById(R.id.ConnectButton);
-        connectToDevice.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                connectToDeviceSelected();
-            }
-        });
-
-        disconnectDevice = (Button) findViewById(R.id.DisconnectButton);
-        disconnectDevice.setVisibility(View.INVISIBLE);
-        disconnectDevice.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                disconnectDeviceSelected();
-            }
-        });
-
         startScanningButton = (Button) findViewById(R.id.StartScanButton);
         startScanningButton.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 startScanning();
             }
         });
+        peripheralTextView = (ListView) findViewById(R.id.PeripheralTextView);
+        deviceAdapter = new DeviceAdapter(this, arrayOfDevices);
+        peripheralTextView.setAdapter(deviceAdapter);
+        peripheralTextView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> parent, View view, int position,
+                                    long id) {
+                MainActivity.Device deviceSelected = arrayOfDevices.get(position);
+                Intent intent = new Intent(getApplicationContext(),DeviceControlActivity.class);
+                intent.putExtra(MainActivity.EXTRAS_DEVICE_ADDRESS, deviceSelected.address);
+                intent.putExtra(MainActivity.EXTRAS_DEVICE_NAME, deviceSelected.name);
+                startActivity(intent);
+            }
+
+        });
+
 
         stopScanningButton = (Button) findViewById(R.id.StopScanButton);
         stopScanningButton.setOnClickListener(new View.OnClickListener() {
@@ -163,6 +166,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         client = new GoogleApiClient.Builder(this).addApi(AppIndex.API).build();
+        startScanning();
 
     }
 
@@ -170,14 +174,23 @@ public class MainActivity extends AppCompatActivity {
     private ScanCallback leScanCallback = new ScanCallback() {
         @Override
         public void onScanResult(int callbackType, ScanResult result) {
-            peripheralTextView.append("Index: " + deviceIndex + ", Device Address: " + result.getDevice().getName() + " rssi: " + result.getRssi() + "\n");
-            devicesDiscovered.add(result.getDevice());
-            deviceIndex++;
-            // auto scroll for text view
-            final int scrollAmount = peripheralTextView.getLayout().getLineTop(peripheralTextView.getLineCount()) - peripheralTextView.getHeight();
-            // if there is no need to scroll, scrollAmount will be <=0
-            if (scrollAmount > 0) {
-                peripheralTextView.scrollTo(0, scrollAmount);
+            boolean alreadyInList = false;
+            for(Device device: arrayOfDevices) {
+                if(device.address.equals(result.getDevice().getAddress())) {
+                    alreadyInList=true;
+                    break;
+                }
+            }
+            if(result.getDevice().getName().contains(deviceName) && !alreadyInList) {
+//            if(!alreadyInList) {
+                Device device = new Device(result.getDevice().getName(), result.getDevice().getAddress());
+                arrayOfDevices.add(device);
+                deviceAdapter.add(device);
+                btScanner.stopScan(leScanCallback);
+                Intent intent = new Intent(getApplicationContext(),DeviceControlActivity.class);
+                intent.putExtra(MainActivity.EXTRAS_DEVICE_ADDRESS, device.address);
+                intent.putExtra(MainActivity.EXTRAS_DEVICE_NAME, device.name);
+                startActivity(intent);
             }
         }
     };
@@ -214,9 +227,7 @@ public class MainActivity extends AppCompatActivity {
         System.out.println("start scanning");
         btScanning = true;
         deviceIndex = 0;
-        devicesDiscovered.clear();
-        peripheralTextView.setText("");
-        peripheralTextView.append("Started Scanning\n");
+        deviceAdapter.clear();
         startScanningButton.setVisibility(View.INVISIBLE);
         stopScanningButton.setVisibility(View.VISIBLE);
         AsyncTask.execute(new Runnable() {
@@ -236,7 +247,6 @@ public class MainActivity extends AppCompatActivity {
 
     public void stopScanning() {
         System.out.println("stopping scanning");
-        peripheralTextView.append("Stopped Scanning\n");
         btScanning = false;
         startScanningButton.setVisibility(View.VISIBLE);
         stopScanningButton.setVisibility(View.INVISIBLE);
@@ -246,13 +256,6 @@ public class MainActivity extends AppCompatActivity {
                 btScanner.stopScan(leScanCallback);
             }
         });
-    }
-
-    public void disconnectDeviceSelected() {
-        peripheralTextView.append("Disconnecting from device\n");
-        printString("Disconnecting from  device ");
-        bluetoothGatt.disconnect();
-
     }
 
     @Override
@@ -289,18 +292,6 @@ public class MainActivity extends AppCompatActivity {
         );
         AppIndex.AppIndexApi.end(client, viewAction);
         client.disconnect();
-    }
-
-    public void connectToDeviceSelected() {
-        peripheralTextView.append("Trying to connect to device at index: " + deviceIndexInput.getText() + "\n");
-        int deviceSelected = Integer.parseInt(deviceIndexInput.getText().toString());
-        mDeviceAddress =devicesDiscovered.get(deviceSelected).getAddress().toString();
-        btdevice = devicesDiscovered.get(deviceSelected);
-        printString("Address"+btdevice.getAddress());
-
-        Intent intent = new Intent(MainActivity.this,DeviceControlActivity.class);
-        intent.putExtra(MainActivity.EXTRAS_DEVICE_ADDRESS, mDeviceAddress);
-        startActivity(intent);
     }
 
     /*Service */

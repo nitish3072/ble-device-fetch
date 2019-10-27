@@ -1,29 +1,42 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    tools:context=".DeviceControlActivity">
- <LinearLayout
-
-    android:orientation="vertical"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-     tools:ignore="MissingConstraints">
-    <Button
-        android:layout_marginTop="10dp"
-        android:padding="10dp"
-        android:text="CONNECT"
-        android:onClick="connectDevice"
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:tools="http://schemas.android.com/tools"
         android:layout_width="match_parent"
-        android:layout_height="50dp"
-        tools:ignore="MissingConstraints" />
+        android:layout_height="match_parent"
+        android:descendantFocusability="beforeDescendants"
+        android:focusableInTouchMode="true"
+        android:paddingBottom="@dimen/activity_vertical_margin"
+        android:paddingLeft="@dimen/activity_horizontal_margin"
+        android:paddingRight="@dimen/activity_horizontal_margin"
+        android:paddingTop="@dimen/activity_vertical_margin"
+        tools:context="com.example.joelwasserman.androidbleconnectexample.DeviceControlActivity">
+
+
      <TextView
-         android:textSize="30sp"
-         android:padding="10dp"
+         android:layout_width="300dp"
+         android:layout_height="50dp"
+         android:textSize="20sp"
+         android:id="@+id/connectedTo"/>
+
+    <Button
+        android:layout_marginTop="60dp"
+        android:layout_marginBottom="20dp"
+        android:padding="10dp"
+        android:text="Disconnect"
+        android:onClick="disconnectDevice"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"/>
+
+     <TextView
+         android:id="@+id/PeripheralDeviceTextView"
          android:layout_width="match_parent"
-         android:layout_height="wrap_content"
-         android:id="@+id/text"/>
-</LinearLayout>
-</androidx.constraintlayout.widget.ConstraintLayout>
+         android:layout_height="match_parent"
+         android:layout_alignRight="@id/PeripheralDeviceTextView"
+         android:layout_marginTop="120dp"
+         android:layout_marginBottom="10dp"
+         android:textSize="20sp"
+         android:scrollbars="vertical"
+         android:maxLines="30" />
+
+
+</RelativeLayout>

@@ -22,6 +22,7 @@ import android.util.Log;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.core.app.NotificationCompat;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import com.codepath.asynchttpclient.AsyncHttpClient;
 import com.codepath.asynchttpclient.RequestHeaders;
@@ -32,7 +33,6 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -63,7 +63,8 @@ public class BluetoothLeService extends Service {
     static List<ServiceCharacteristic> serviceCharacteristicList = new ArrayList<>();
     static Map<String, ReadingType> characteristicUuidReadingTypeMap = new HashMap<>();
     private int serviceCharacteristicMapCounter = 0;
-    public int counter=0;
+    public int counter = 0;
+    public boolean dontRestartFlag = false;
 
     public static final String SERVER_URL = "https://olacabs.dashboard.enliteresearch.com/dashboard/upsert/external/data";
 
@@ -94,17 +95,20 @@ public class BluetoothLeService extends Service {
     }
 
     private enum ReadingType {
-        temp(100, BluetoothGattCharacteristic.FORMAT_UINT16),
-        rh(100, BluetoothGattCharacteristic.FORMAT_UINT16),
-        air_quality(100, BluetoothGattCharacteristic.FORMAT_UINT16),
-        data_accuracy(1, BluetoothGattCharacteristic.FORMAT_SINT8),
-        dust(100, BluetoothGattCharacteristic.FORMAT_UINT16);
+        temp(100, BluetoothGattCharacteristic.FORMAT_UINT16, "C"),
+        rh(100, BluetoothGattCharacteristic.FORMAT_UINT16, "%"),
+        air_quality(100, BluetoothGattCharacteristic.FORMAT_UINT16, "PM"),
+        data_accuracy(1, BluetoothGattCharacteristic.FORMAT_SINT8, "unit"),
+        dust(100, BluetoothGattCharacteristic.FORMAT_UINT16, "PM");
 
         int multiplyingFactor;
         int valueFormatType;
-        ReadingType(Integer multiplyingFactor, int valueFormatType) {
+        String unit;
+
+        ReadingType(Integer multiplyingFactor, int valueFormatType, String unit) {
             this.multiplyingFactor = multiplyingFactor;
             this.valueFormatType = valueFormatType;
+            this.unit = unit;
         }
     }
 
@@ -155,6 +159,12 @@ public class BluetoothLeService extends Service {
 
     }
 
+    private void sendMessageToActivity(String msg) {
+        Intent intent = new Intent("sendDataToActivity");
+        intent.putExtra("MESSAGE", msg);
+        LocalBroadcastManager.getInstance(this.getApplicationContext()).sendBroadcast(intent);
+    }
+
     private final BluetoothGattCallback btleGattCallback = new BluetoothGattCallback() {
 
         @Override
@@ -162,6 +172,7 @@ public class BluetoothLeService extends Service {
             // this will get called anytime you perform a read or write characteristic operation
             ReadingType readingType = characteristicUuidReadingTypeMap.get(characteristic.getUuid().toString().toUpperCase());
             Integer value = characteristic.getIntValue(readingType.valueFormatType, 0);
+            Double sendableValue = Double.valueOf(value) / readingType.multiplyingFactor;
             System.out.println("Characteristic " + characteristic.getUuid() + " discovered for service: " + value);
             JSONObject jsonObject = new JSONObject();
             try {
@@ -178,7 +189,7 @@ public class BluetoothLeService extends Service {
                  * }
                  */
                 JSONObject fields = new JSONObject();
-                fields.put(readingType.toString(), Double.valueOf(value)/readingType.multiplyingFactor);
+                fields.put(readingType.toString(), sendableValue);
                 JSONObject tags = new JSONObject();
                 tags.put("sensorID", mBluetoothGatt.getDevice().getName());
 //                tags.put("equipment", "110");
@@ -189,6 +200,7 @@ public class BluetoothLeService extends Service {
                 e.printStackTrace();
             }
             sendApiRequestToServer(jsonObject);
+            sendMessageToActivity(readingType + ": " + sendableValue + " " + readingType.unit);
         }
 
         @Override
@@ -248,10 +260,10 @@ public class BluetoothLeService extends Service {
             return;
         }
         int index = 0;
-        for(ServiceCharacteristic serviceCharacteristic: serviceCharacteristicList) {
-            if(index==serviceCharacteristicMapCounter) {
+        for (ServiceCharacteristic serviceCharacteristic : serviceCharacteristicList) {
+            if (index == serviceCharacteristicMapCounter) {
                 System.out.println(createDescriptorsForCharacteristics(serviceCharacteristic.getServiceId(), serviceCharacteristic.getCharacterticId()));
-                serviceCharacteristicMapCounter = serviceCharacteristicMapCounter >= serviceCharacteristicList.size()-1 ? 0 : serviceCharacteristicMapCounter+1;
+                serviceCharacteristicMapCounter = serviceCharacteristicMapCounter >= serviceCharacteristicList.size() - 1 ? 0 : serviceCharacteristicMapCounter + 1;
                 break;
             }
             index++;
@@ -311,6 +323,7 @@ public class BluetoothLeService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        dontRestartFlag = false;
         if (Build.VERSION.SDK_INT > Build.VERSION_CODES.O)
             startMyOwnForeground();
         else
@@ -329,8 +342,7 @@ public class BluetoothLeService extends Service {
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
-    private void startMyOwnForeground()
-    {
+    private void startMyOwnForeground() {
         String NOTIFICATION_CHANNEL_ID = "example.permanence";
         String channelName = "Background Service";
         NotificationChannel chan = new NotificationChannel(NOTIFICATION_CHANNEL_ID, channelName, NotificationManager.IMPORTANCE_HIGH);
@@ -353,11 +365,12 @@ public class BluetoothLeService extends Service {
 
     private Timer timer;
     private TimerTask timerTask;
+
     public void startTimer() {
         timer = new Timer();
         timerTask = new TimerTask() {
             public void run() {
-                Log.i("Count", "=========  "+ (counter++));
+                Log.i("Count", "=========  " + (counter++));
             }
         };
         timer.schedule(timerTask, 1000, 1000); //
@@ -379,6 +392,7 @@ public class BluetoothLeService extends Service {
     }
 
     public boolean initialize() {
+        dontRestartFlag = false;
         serviceCharacteristicList.add(new ServiceCharacteristic("0000181A-0000-1000-8000-00805F9B34FB", "00002A6E-0000-1000-8000-00805F9B34FB"));
         serviceCharacteristicList.add(new ServiceCharacteristic("0000181A-0000-1000-8000-00805F9B34FB", "00002A6F-0000-1000-8000-00805F9B34FB"));
         serviceCharacteristicList.add(new ServiceCharacteristic("1BF8D02D-D56F-4D38-B068-D60D38637B46", "059621E8-B53C-40A7-A006-EF9AFCCFF870"));
@@ -410,6 +424,7 @@ public class BluetoothLeService extends Service {
     }
 
     public boolean connect(final String address) {
+        dontRestartFlag = false;
         printString("Connect");
         if (mBluetoothAdapter == null || address == null) {
             Log.w(TAG, "BluetoothAdapter not initialized or unspecified address.");
@@ -446,6 +461,10 @@ public class BluetoothLeService extends Service {
         mBluetoothDeviceAddress = address;
         mConnectionState = STATE_CONNECTING;
         return true;
+    }
+
+    public void dontRestart() {
+        dontRestartFlag = true;
     }
 
 }
