@@ -94,15 +94,17 @@ public class BluetoothLeService extends Service {
     }
 
     private enum ReadingType {
-        temp(100),
-        rh(100),
-        air_quality(100),
-        data_accuracy(1),
-        dust(100);
+        temp(100, BluetoothGattCharacteristic.FORMAT_UINT16),
+        rh(100, BluetoothGattCharacteristic.FORMAT_UINT16),
+        air_quality(100, BluetoothGattCharacteristic.FORMAT_UINT16),
+        data_accuracy(1, BluetoothGattCharacteristic.FORMAT_SINT8),
+        dust(100, BluetoothGattCharacteristic.FORMAT_UINT16);
 
         int multiplyingFactor;
-        ReadingType(Integer multiplyingFactor) {
+        int valueFormatType;
+        ReadingType(Integer multiplyingFactor, int valueFormatType) {
             this.multiplyingFactor = multiplyingFactor;
+            this.valueFormatType = valueFormatType;
         }
     }
 
@@ -158,7 +160,8 @@ public class BluetoothLeService extends Service {
         @Override
         public void onCharacteristicChanged(BluetoothGatt gatt, final BluetoothGattCharacteristic characteristic) {
             // this will get called anytime you perform a read or write characteristic operation
-            Integer value = characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT16, 0);
+            ReadingType readingType = characteristicUuidReadingTypeMap.get(characteristic.getUuid().toString().toUpperCase());
+            Integer value = characteristic.getIntValue(readingType.valueFormatType, 0);
             System.out.println("Characteristic " + characteristic.getUuid() + " discovered for service: " + value);
             JSONObject jsonObject = new JSONObject();
             try {
@@ -175,7 +178,7 @@ public class BluetoothLeService extends Service {
                  * }
                  */
                 JSONObject fields = new JSONObject();
-                fields.put(characteristicUuidReadingTypeMap.get(characteristic.getUuid().toString().toUpperCase()).toString(), Double.valueOf(value)/characteristicUuidReadingTypeMap.get(characteristic.getUuid().toString().toUpperCase()).multiplyingFactor);
+                fields.put(readingType.toString(), Double.valueOf(value)/readingType.multiplyingFactor);
                 JSONObject tags = new JSONObject();
                 tags.put("sensorID", mBluetoothGatt.getDevice().getName());
 //                tags.put("equipment", "110");
