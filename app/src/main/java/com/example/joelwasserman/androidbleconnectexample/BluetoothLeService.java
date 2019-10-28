@@ -1,5 +1,6 @@
 package com.example.joelwasserman.androidbleconnectexample;
 
+import android.Manifest;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -13,11 +14,18 @@ import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
 import android.os.Binder;
 import android.os.Build;
+import android.os.Bundle;
+import android.os.Handler;
 import android.os.IBinder;
 import android.util.Log;
+import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
@@ -33,6 +41,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -66,6 +75,17 @@ public class BluetoothLeService extends Service {
     public int counter = 0;
     public boolean dontRestartFlag = false;
 
+    // GPS
+    boolean isGPSEnable = false;
+    boolean isNetworkEnable = false;
+    double latitude, longitude;
+    LocationManager locationManager;
+    Location location;
+    private Handler mHandler = new Handler();
+    private static final int TWO_MINUTES = 1000 * 60 * 2;
+    public MyLocationListener listener;
+    public static final String BROADCAST_ACTION = "Hello World";
+
     public static final String SERVER_URL = "https://olacabs.dashboard.enliteresearch.com/dashboard/upsert/external/data";
 
     class ServiceCharacteristic {
@@ -94,12 +114,50 @@ public class BluetoothLeService extends Service {
         }
     }
 
+    public class MyLocationListener implements LocationListener {
+
+        public void onLocationChanged(final Location loc) {
+            Log.i("*****", "Location changed");
+            loc.getLatitude();
+            loc.getLongitude();
+            if(loc.getAccuracy() < 200.0f) {
+                latitude = loc.getLatitude();
+                longitude = loc.getLongitude();
+                locationManager.removeUpdates(listener);
+            }
+        }
+
+        @Override
+        public void onStatusChanged(String provider, int status, Bundle extras) {
+
+        }
+
+        public void onProviderDisabled(String provider) {
+            Toast.makeText( getApplicationContext(), "Gps Disabled", Toast.LENGTH_SHORT ).show();
+        }
+
+
+        public void onProviderEnabled(String provider) {
+            Toast.makeText( getApplicationContext(), "Gps Enabled", Toast.LENGTH_SHORT).show();
+        }
+
+    }
+
+    private boolean isSameProvider(String provider1, String provider2) {
+        if (provider1 == null) {
+            return provider2 == null;
+        }
+        return provider1.equals(provider2);
+    }
+
     private enum ReadingType {
         temp(100, BluetoothGattCharacteristic.FORMAT_UINT16, "C"),
         rh(100, BluetoothGattCharacteristic.FORMAT_UINT16, "%"),
         air_quality(100, BluetoothGattCharacteristic.FORMAT_UINT16, "PM"),
         data_accuracy(1, BluetoothGattCharacteristic.FORMAT_SINT8, "unit"),
-        dust(100, BluetoothGattCharacteristic.FORMAT_UINT16, "PM");
+        dust(100, BluetoothGattCharacteristic.FORMAT_UINT16, "PM"),
+        location_latitute(1, BluetoothGattCharacteristic.FORMAT_UINT16, "degree"),
+        location_longitude(1, BluetoothGattCharacteristic.FORMAT_UINT16, "degree");
 
         int multiplyingFactor;
         int valueFormatType;
@@ -174,31 +232,8 @@ public class BluetoothLeService extends Service {
             Integer value = characteristic.getIntValue(readingType.valueFormatType, 0);
             Double sendableValue = Double.valueOf(value) / readingType.multiplyingFactor;
             System.out.println("Characteristic " + characteristic.getUuid() + " discovered for service: " + value);
-            JSONObject jsonObject = new JSONObject();
-            try {
-                /**
-                 * {
-                 *    "fields" : {
-                 *     "by" : 1.0
-                 *    },
-                 *    "tags" : {
-                 *        "sensorID" : "sensorId",
-                 *        "equipment" :"110"
-                 *    },
-                 *    "time": 1571208265000
-                 * }
-                 */
-                JSONObject fields = new JSONObject();
-                fields.put(readingType.toString(), sendableValue);
-                JSONObject tags = new JSONObject();
-                tags.put("sensorID", mBluetoothGatt.getDevice().getName());
-//                tags.put("equipment", "110");
-                jsonObject.put("fields", fields);
-                jsonObject.put("tags", tags);
-                jsonObject.put("time", System.currentTimeMillis());
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
+            JSONObject jsonObject = buildJsonObjectForSending(new ArrayList<>(Arrays.asList(readingType.toString())),
+                    new ArrayList<>(Arrays.asList(sendableValue)));
             sendApiRequestToServer(jsonObject);
             sendMessageToActivity(readingType + ": " + sendableValue + " " + readingType.unit);
         }
@@ -324,6 +359,9 @@ public class BluetoothLeService extends Service {
     public void onCreate() {
         super.onCreate();
         dontRestartFlag = false;
+        listener = new MyLocationListener();
+        Timer mLocationStartTimer = new Timer();
+        mLocationStartTimer.schedule(new TimerTaskToGetLocation(), 60000L, 60000L);
         if (Build.VERSION.SDK_INT > Build.VERSION_CODES.O)
             startMyOwnForeground();
         else
@@ -419,7 +457,6 @@ public class BluetoothLeService extends Service {
             Log.e(TAG, "Unable to obtain a BluetoothAdapter.");
             return false;
         }
-
         return true;
     }
 
@@ -445,7 +482,6 @@ public class BluetoothLeService extends Service {
 
         final BluetoothDevice device = mBluetoothAdapter.getRemoteDevice(address);
 
-
         //final BluetoothDevice device = mBluetoothAdapter.getRemoteDevice(address);
         if (device == null) {
             Log.w(TAG, "Device not found.  Unable to connect.");
@@ -465,6 +501,116 @@ public class BluetoothLeService extends Service {
 
     public void dontRestart() {
         dontRestartFlag = true;
+    }
+
+    private class TimerTaskToGetLocation extends TimerTask {
+        @Override
+        public void run() {
+            mHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    fn_getlocation();
+                }
+            });
+        }
+    }
+
+    private void fn_getlocation() {
+        locationManager = (LocationManager) getApplicationContext().getSystemService(LOCATION_SERVICE);
+        isGPSEnable = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER);
+        isNetworkEnable = locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
+        Log.e("latitude",latitude+"");
+        Log.e("longitude",longitude+"");
+
+        if (!isGPSEnable && !isNetworkEnable) {
+
+        } else {
+
+            if (isNetworkEnable) {
+                location = null;
+                if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                    // TODO: Consider calling
+                    //    Activity#requestPermissions
+                    // here to request the missing permissions, and then overriding
+                    //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                    //                                          int[] grantResults)
+                    // to handle the case where the user grants the permission. See the documentation
+                    // for Activity#requestPermissions for more details.
+                    return;
+                }
+                locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 1000L, 0.0f, listener);
+                if (locationManager != null) {
+                    if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                        // TODO: Consider calling
+                        //    Activity#requestPermissions
+                        // here to request the missing permissions, and then overriding
+                        //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                        //                                          int[] grantResults)
+                        // to handle the case where the user grants the permission. See the documentation
+                        // for Activity#requestPermissions for more details.
+                        return;
+                    }
+                    location = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+                    if (location != null) {
+                        JSONObject jsonObject = buildJsonObjectForSending(new ArrayList<String>(Arrays.asList(ReadingType.location_latitute.toString(), ReadingType.location_longitude.toString())),
+                                new ArrayList<Double>(Arrays.asList(latitude, longitude)));
+                        sendApiRequestToServer(jsonObject);
+                    }
+                }
+            }
+            if (isGPSEnable) {
+                location = null;
+                locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0.0f, listener);
+                if (locationManager != null) {
+                    if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                        // TODO: Consider calling
+                        //    Activity#requestPermissions
+                        // here to request the missing permissions, and then overriding
+                        //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                        //                                          int[] grantResults)
+                        // to handle the case where the user grants the permission. See the documentation
+                        // for Activity#requestPermissions for more details.
+                        return;
+                    }
+                    location = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+                    if (location!=null){
+                        JSONObject jsonObject = buildJsonObjectForSending(new ArrayList<>(Arrays.asList(ReadingType.location_latitute.toString(), ReadingType.location_longitude.toString())),
+                                new ArrayList<>(Arrays.asList(latitude, longitude)));
+                        sendApiRequestToServer(jsonObject);
+                    }
+                }
+            }
+        }
+    }
+
+    public JSONObject buildJsonObjectForSending(List<String> field, List<Double> value) {
+        JSONObject jsonObject = new JSONObject();
+        try {
+            /**
+             * {
+             *    "fields" : {
+             *     "by" : 1.0
+             *    },
+             *    "tags" : {
+             *        "sensorID" : "sensorId",
+             *        "equipment" :"110"
+             *    },
+             *    "time": 1571208265000
+             * }
+             */
+            JSONObject fields = new JSONObject();
+            for(int i=0;i<field.size();i++) {
+                fields.put(field.get(i), value.get(i));
+            }
+            JSONObject tags = new JSONObject();
+            tags.put("sensorID", mBluetoothGatt.getDevice().getName());
+            jsonObject.put("fields", fields);
+            jsonObject.put("tags", tags);
+            jsonObject.put("time", System.currentTimeMillis());
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+        return jsonObject;
     }
 
 }
