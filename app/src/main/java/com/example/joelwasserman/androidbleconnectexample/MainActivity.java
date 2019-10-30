@@ -181,7 +181,8 @@ public class MainActivity extends AppCompatActivity {
                     break;
                 }
             }
-            if(result.getDevice().getName().contains(deviceName) && !alreadyInList) {
+            if(result!=null && result.getDevice()!=null && result.getDevice().getName()!=null
+                    && result.getDevice().getName().contains(deviceName) && !alreadyInList) {
 //            if(!alreadyInList) {
                 Device device = new Device(result.getDevice().getName(), result.getDevice().getAddress());
                 arrayOfDevices.add(device);
