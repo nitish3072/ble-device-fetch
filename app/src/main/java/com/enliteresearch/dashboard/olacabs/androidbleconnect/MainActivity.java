@@ -16,6 +16,7 @@ import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
+import android.util.Log;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.Button;
@@ -206,7 +207,7 @@ public class MainActivity extends AppCompatActivity {
         switch (requestCode) {
             case PERMISSION_REQUEST_COARSE_LOCATION: {
                 if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    System.out.println("coarse location permission granted");
+                    Log.i("Enlite Service","coarse location permission granted");
                 } else {
                     final AlertDialog.Builder builder = new AlertDialog.Builder(this);
                     builder.setTitle("Functionality limited");
@@ -226,7 +227,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void startScanning() {
-        System.out.println("start scanning");
+        Log.i("Enlite Service","start scanning");
         btScanning = true;
         deviceIndex = 0;
         deviceAdapter.clear();
@@ -248,7 +249,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void stopScanning() {
-        System.out.println("stopping scanning");
+        Log.i("Enlite Service","stopping scanning");
         btScanning = false;
         startScanningButton.setVisibility(View.VISIBLE);
         stopScanningButton.setVisibility(View.INVISIBLE);

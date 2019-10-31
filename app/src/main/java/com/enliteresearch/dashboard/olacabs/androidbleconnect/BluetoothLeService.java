@@ -205,14 +205,14 @@ public class BluetoothLeService extends Service {
             @Override
             public void onSuccess(int statusCode, Headers headers, JSON json) {
                 // peripheralTextView.append("Data send successfully\n");
-                System.out.println(json.jsonArray.toString());
+                Log.i("Enlite Service", json.jsonArray.toString());
 
                 printString("DATA send Successfully" + json.jsonArray.toString());
             }
 
             @Override
             public void onFailure(int statusCode, Headers headers, String response, Throwable throwable) {
-                System.out.println(response);
+                Log.i("Enlite Service", response);
                 printString(response);
             }
         });
@@ -233,7 +233,7 @@ public class BluetoothLeService extends Service {
             ReadingType readingType = characteristicUuidReadingTypeMap.get(characteristic.getUuid().toString().toUpperCase());
             Integer value = characteristic.getIntValue(readingType.valueFormatType, 0);
             Double sendableValue = Double.valueOf(value) / readingType.multiplyingFactor;
-            System.out.println("Characteristic " + characteristic.getUuid() + " discovered for service: " + value);
+            Log.i("Enlite Service", "Characteristic " + characteristic.getUuid() + " discovered for service: " + value);
             buildJsonObjectAndSend(readingType.toString(),sendableValue);
             sendMessageToActivity(readingType + ": " + sendableValue + " " + readingType.unit);
         }
@@ -241,7 +241,7 @@ public class BluetoothLeService extends Service {
         @Override
         public void onConnectionStateChange(final BluetoothGatt gatt, final int status, final int newState) {
             // this will get called when a device connects or disconnects
-            System.out.println(newState);
+            Log.i("Enlite Service", Integer.toString(newState));
             switch (newState) {
                 case 0:
                     printString("device disconnected");
@@ -276,7 +276,7 @@ public class BluetoothLeService extends Service {
         private void broadcastUpdate(final String action,
                                      final BluetoothGattCharacteristic characteristic) {
 
-            System.out.println(characteristic.getUuid());
+            Log.i("Enlite Service",characteristic.getUuid().toString());
         }
 
         @Override
@@ -297,7 +297,7 @@ public class BluetoothLeService extends Service {
         int index = 0;
         for (ServiceCharacteristic serviceCharacteristic : serviceCharacteristicList) {
             if (index == serviceCharacteristicMapCounter) {
-                System.out.println(createDescriptorsForCharacteristics(serviceCharacteristic.getServiceId(), serviceCharacteristic.getCharacterticId()));
+                Log.i("Enlite Service", Boolean.toString(createDescriptorsForCharacteristics(serviceCharacteristic.getServiceId(), serviceCharacteristic.getCharacterticId())));
                 serviceCharacteristicMapCounter = serviceCharacteristicMapCounter >= serviceCharacteristicList.size() - 1 ? 0 : serviceCharacteristicMapCounter + 1;
                 break;
             }
