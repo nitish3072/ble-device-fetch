@@ -14,6 +14,7 @@ import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.location.Location;
@@ -41,7 +42,6 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -52,6 +52,8 @@ import java.util.UUID;
 import okhttp3.Headers;
 import okhttp3.MediaType;
 import okhttp3.RequestBody;
+
+import static com.example.joelwasserman.androidbleconnectexample.MainActivity.EXTRAS_DEVICE_ADDRESS;
 
 /**
  * Service for managing connection and data communication with a GATT server hosted on a
@@ -71,6 +73,7 @@ public class BluetoothLeService extends Service {
     private static final int STATE_CONNECTED = 2;
     static List<ServiceCharacteristic> serviceCharacteristicList = new ArrayList<>();
     static Map<String, ReadingType> characteristicUuidReadingTypeMap = new HashMap<>();
+    Map<String, Double> readingTypeAndValues = new HashMap<>();
     private int serviceCharacteristicMapCounter = 0;
     public int counter = 0;
     public boolean dontRestartFlag = false;
@@ -151,11 +154,11 @@ public class BluetoothLeService extends Service {
     }
 
     private enum ReadingType {
-        temp(100, BluetoothGattCharacteristic.FORMAT_UINT16, "C"),
+        temp(100, BluetoothGattCharacteristic.FORMAT_UINT16, "°C"),
         rh(100, BluetoothGattCharacteristic.FORMAT_UINT16, "%"),
-        air_quality(100, BluetoothGattCharacteristic.FORMAT_UINT16, "PM"),
+        air_quality(100, BluetoothGattCharacteristic.FORMAT_UINT16, "unit"),
         data_accuracy(1, BluetoothGattCharacteristic.FORMAT_SINT8, "unit"),
-        dust(100, BluetoothGattCharacteristic.FORMAT_UINT16, "PM"),
+        dust(100, BluetoothGattCharacteristic.FORMAT_UINT16, "ug/m3"),
         location_latitude(1, BluetoothGattCharacteristic.FORMAT_UINT16, "degree"),
         location_longitude(1, BluetoothGattCharacteristic.FORMAT_UINT16, "degree");
 
@@ -232,9 +235,7 @@ public class BluetoothLeService extends Service {
             Integer value = characteristic.getIntValue(readingType.valueFormatType, 0);
             Double sendableValue = Double.valueOf(value) / readingType.multiplyingFactor;
             System.out.println("Characteristic " + characteristic.getUuid() + " discovered for service: " + value);
-            JSONObject jsonObject = buildJsonObjectForSending(new ArrayList<>(Arrays.asList(readingType.toString())),
-                    new ArrayList<>(Arrays.asList(sendableValue)));
-            sendApiRequestToServer(jsonObject);
+            buildJsonObjectAndSend(readingType.toString(),sendableValue);
             sendMessageToActivity(readingType + ": " + sendableValue + " " + readingType.unit);
         }
 
@@ -362,6 +363,12 @@ public class BluetoothLeService extends Service {
         listener = new MyLocationListener();
         Timer mLocationStartTimer = new Timer();
         mLocationStartTimer.schedule(new TimerTaskToGetLocation(), 60000L, 60000L);
+        if(mBluetoothDeviceAddress!=null) {
+            connect(mBluetoothDeviceAddress);
+        } else {
+            SharedPreferences sharedPreferences = getApplicationContext().getSharedPreferences(EXTRAS_DEVICE_ADDRESS, Context.MODE_PRIVATE);
+            mBluetoothDeviceAddress = sharedPreferences.getString(EXTRAS_DEVICE_ADDRESS, "defaultValue");
+        }
         if (Build.VERSION.SDK_INT > Build.VERSION_CODES.O)
             startMyOwnForeground();
         else
@@ -461,6 +468,15 @@ public class BluetoothLeService extends Service {
     }
 
     public boolean connect(final String address) {
+        SharedPreferences sharedPreferences = getApplicationContext().getSharedPreferences(EXTRAS_DEVICE_ADDRESS, Context.MODE_PRIVATE);
+        SharedPreferences.Editor editor = sharedPreferences.edit();
+        if(address!=null) {
+            editor.putString(EXTRAS_DEVICE_ADDRESS, address);
+            editor.apply();
+        } else {
+            mBluetoothDeviceAddress = sharedPreferences.getString(EXTRAS_DEVICE_ADDRESS, "defaultValue");
+        }
+        editor.putString(EXTRAS_DEVICE_ADDRESS, address);
         dontRestartFlag = false;
         printString("Connect");
         if (mBluetoothAdapter == null || address == null) {
@@ -550,12 +566,6 @@ public class BluetoothLeService extends Service {
                         // for Activity#requestPermissions for more details.
                         return;
                     }
-                    location = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
-                    if (location != null) {
-                        JSONObject jsonObject = buildJsonObjectForSending(new ArrayList<String>(Arrays.asList(ReadingType.location_latitude.toString(), ReadingType.location_longitude.toString())),
-                                new ArrayList<Double>(Arrays.asList(latitude, longitude)));
-                        sendApiRequestToServer(jsonObject);
-                    }
                 }
             }
             if (isGPSEnable) {
@@ -572,18 +582,15 @@ public class BluetoothLeService extends Service {
                         // for Activity#requestPermissions for more details.
                         return;
                     }
-                    location = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
-                    if (location!=null){
-                        JSONObject jsonObject = buildJsonObjectForSending(new ArrayList<>(Arrays.asList(ReadingType.location_latitude.toString(), ReadingType.location_longitude.toString())),
-                                new ArrayList<>(Arrays.asList(latitude, longitude)));
-                        sendApiRequestToServer(jsonObject);
-                    }
                 }
             }
         }
     }
 
-    public JSONObject buildJsonObjectForSending(List<String> field, List<Double> value) {
+    public synchronized JSONObject buildJsonObjectAndSend(String field, Double value) {
+
+        timerSendApi.cancel();
+        readingTypeAndValues.put(field, value);
         JSONObject jsonObject = new JSONObject();
         try {
             /**
@@ -599,9 +606,11 @@ public class BluetoothLeService extends Service {
              * }
              */
             JSONObject fields = new JSONObject();
-            for(int i=0;i<field.size();i++) {
-                fields.put(field.get(i), value.get(i));
+            for(String key: readingTypeAndValues.keySet()) {
+                fields.put(key, readingTypeAndValues.get(key));
             }
+            fields.put(ReadingType.location_latitude.toString(), latitude);
+            fields.put(ReadingType.location_longitude.toString(), longitude);
             JSONObject tags = new JSONObject();
             tags.put("sensorID", mBluetoothGatt.getDevice().getName());
             jsonObject.put("fields", fields);
@@ -610,7 +619,22 @@ public class BluetoothLeService extends Service {
         } catch (JSONException e) {
             e.printStackTrace();
         }
+        startTimerForApiFiring(jsonObject);
         return jsonObject;
+    }
+
+    private Timer timerSendApi = new Timer();
+    private TimerTask timerTaskSendApi;
+
+    public void startTimerForApiFiring(final JSONObject jsonObject) {
+        timerSendApi = new Timer();
+        timerTaskSendApi = new TimerTask() {
+            public void run() {
+                sendApiRequestToServer(jsonObject);
+                readingTypeAndValues = new HashMap<>();
+            }
+        };
+        timerSendApi.schedule(timerTaskSendApi, 5000, 10000000);
     }
 
 }
