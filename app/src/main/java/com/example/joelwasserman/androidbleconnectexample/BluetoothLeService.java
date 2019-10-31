@@ -156,7 +156,7 @@ public class BluetoothLeService extends Service {
         air_quality(100, BluetoothGattCharacteristic.FORMAT_UINT16, "PM"),
         data_accuracy(1, BluetoothGattCharacteristic.FORMAT_SINT8, "unit"),
         dust(100, BluetoothGattCharacteristic.FORMAT_UINT16, "PM"),
-        location_latitute(1, BluetoothGattCharacteristic.FORMAT_UINT16, "degree"),
+        location_latitude(1, BluetoothGattCharacteristic.FORMAT_UINT16, "degree"),
         location_longitude(1, BluetoothGattCharacteristic.FORMAT_UINT16, "degree");
 
         int multiplyingFactor;
@@ -552,7 +552,7 @@ public class BluetoothLeService extends Service {
                     }
                     location = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
                     if (location != null) {
-                        JSONObject jsonObject = buildJsonObjectForSending(new ArrayList<String>(Arrays.asList(ReadingType.location_latitute.toString(), ReadingType.location_longitude.toString())),
+                        JSONObject jsonObject = buildJsonObjectForSending(new ArrayList<String>(Arrays.asList(ReadingType.location_latitude.toString(), ReadingType.location_longitude.toString())),
                                 new ArrayList<Double>(Arrays.asList(latitude, longitude)));
                         sendApiRequestToServer(jsonObject);
                     }
@@ -574,7 +574,7 @@ public class BluetoothLeService extends Service {
                     }
                     location = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
                     if (location!=null){
-                        JSONObject jsonObject = buildJsonObjectForSending(new ArrayList<>(Arrays.asList(ReadingType.location_latitute.toString(), ReadingType.location_longitude.toString())),
+                        JSONObject jsonObject = buildJsonObjectForSending(new ArrayList<>(Arrays.asList(ReadingType.location_latitude.toString(), ReadingType.location_longitude.toString())),
                                 new ArrayList<>(Arrays.asList(latitude, longitude)));
                         sendApiRequestToServer(jsonObject);
                     }
