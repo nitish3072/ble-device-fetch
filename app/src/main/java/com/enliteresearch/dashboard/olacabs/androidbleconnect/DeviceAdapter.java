@@ -1,4 +1,4 @@
-package com.example.joelwasserman.androidbleconnectexample;
+package com.enliteresearch.dashboard.olacabs.androidbleconnect;
 
 import android.content.Context;
 import android.view.LayoutInflater;

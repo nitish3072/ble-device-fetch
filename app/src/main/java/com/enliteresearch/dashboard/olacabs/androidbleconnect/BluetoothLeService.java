@@ -1,4 +1,4 @@
-package com.example.joelwasserman.androidbleconnectexample;
+package com.enliteresearch.dashboard.olacabs.androidbleconnect;
 
 import android.Manifest;
 import android.app.Notification;
@@ -53,7 +53,7 @@ import okhttp3.Headers;
 import okhttp3.MediaType;
 import okhttp3.RequestBody;
 
-import static com.example.joelwasserman.androidbleconnectexample.MainActivity.EXTRAS_DEVICE_ADDRESS;
+import static com.enliteresearch.dashboard.olacabs.androidbleconnect.MainActivity.EXTRAS_DEVICE_ADDRESS;
 
 /**
  * Service for managing connection and data communication with a GATT server hosted on a
@@ -85,9 +85,8 @@ public class BluetoothLeService extends Service {
     LocationManager locationManager;
     Location location;
     private Handler mHandler = new Handler();
-    private static final int TWO_MINUTES = 1000 * 60 * 2;
     public MyLocationListener listener;
-    public static final String BROADCAST_ACTION = "Hello World";
+    Timer mLocationStartTimer = new Timer();
 
     public static final String SERVER_URL = "https://olacabs.dashboard.enliteresearch.com/dashboard/upsert/external/data";
 
@@ -361,7 +360,8 @@ public class BluetoothLeService extends Service {
         super.onCreate();
         dontRestartFlag = false;
         listener = new MyLocationListener();
-        Timer mLocationStartTimer = new Timer();
+        mLocationStartTimer.cancel();
+        mLocationStartTimer = new Timer();
         mLocationStartTimer.schedule(new TimerTaskToGetLocation(), 60000L, 60000L);
         if(mBluetoothDeviceAddress!=null) {
             connect(mBluetoothDeviceAddress);
@@ -418,7 +418,7 @@ public class BluetoothLeService extends Service {
                 Log.i("Count", "=========  " + (counter++));
             }
         };
-        timer.schedule(timerTask, 1000, 1000); //
+        timer.schedule(timerTask, 5000, 5000); //
     }
 
     public void stoptimertask() {

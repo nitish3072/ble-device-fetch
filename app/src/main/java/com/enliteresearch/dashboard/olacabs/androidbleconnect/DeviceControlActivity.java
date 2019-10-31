@@ -1,4 +1,4 @@
-package com.example.joelwasserman.androidbleconnectexample;
+package com.enliteresearch.dashboard.olacabs.androidbleconnect;
 
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
@@ -15,8 +15,6 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
-
-import static android.app.PendingIntent.getActivity;
 
 public class DeviceControlActivity extends AppCompatActivity {
 
