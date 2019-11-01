@@ -128,6 +128,7 @@ public class MainActivity extends AppCompatActivity {
                 Intent intent = new Intent(getApplicationContext(),DeviceControlActivity.class);
                 intent.putExtra(MainActivity.EXTRAS_DEVICE_ADDRESS, deviceSelected.address);
                 intent.putExtra(MainActivity.EXTRAS_DEVICE_NAME, deviceSelected.name);
+                btScanner.stopScan(leScanCallback);
                 startActivity(intent);
             }
 
@@ -188,12 +189,12 @@ public class MainActivity extends AppCompatActivity {
                 Device device = new Device(result.getDevice().getName(), result.getDevice().getAddress());
                 arrayOfDevices.add(device);
                 deviceAdapter.add(device);
-                // TODO add this final version
-//                btScanner.stopScan(leScanCallback);
-//                Intent intent = new Intent(getApplicationContext(),DeviceControlActivity.class);
-//                intent.putExtra(MainActivity.EXTRAS_DEVICE_ADDRESS, device.address);
-//                intent.putExtra(MainActivity.EXTRAS_DEVICE_NAME, device.name);
-//                startActivity(intent);
+                // TODO add/remove this final version
+                btScanner.stopScan(leScanCallback);
+                Intent intent = new Intent(getApplicationContext(),DeviceControlActivity.class);
+                intent.putExtra(MainActivity.EXTRAS_DEVICE_ADDRESS, device.address);
+                intent.putExtra(MainActivity.EXTRAS_DEVICE_NAME, device.name);
+                startActivity(intent);
             }
         }
     };

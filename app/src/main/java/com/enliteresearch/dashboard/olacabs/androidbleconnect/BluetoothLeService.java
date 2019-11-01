@@ -54,6 +54,7 @@ import okhttp3.MediaType;
 import okhttp3.RequestBody;
 
 import static com.enliteresearch.dashboard.olacabs.androidbleconnect.MainActivity.EXTRAS_DEVICE_ADDRESS;
+import static com.enliteresearch.dashboard.olacabs.androidbleconnect.MainActivity.EXTRAS_DEVICE_NAME;
 
 /**
  * Service for managing connection and data communication with a GATT server hosted on a
@@ -87,8 +88,10 @@ public class BluetoothLeService extends Service {
     private Handler mHandler = new Handler();
     public MyLocationListener listener;
     Timer mLocationStartTimer = new Timer();
+    boolean disableLocation = false;
 
     public static final String SERVER_URL = "https://olacabs.dashboard.enliteresearch.com/dashboard/upsert/external/data";
+    private String mDeviceName;
 
     class ServiceCharacteristic {
         private String serviceId;
@@ -125,6 +128,8 @@ public class BluetoothLeService extends Service {
             if(loc.getAccuracy() < 200.0f) {
                 latitude = loc.getLatitude();
                 longitude = loc.getLongitude();
+                Log.e("latitude",latitude+"");
+                Log.e("longitude",longitude+"");
                 locationManager.removeUpdates(listener);
             }
         }
@@ -234,6 +239,7 @@ public class BluetoothLeService extends Service {
             Integer value = characteristic.getIntValue(readingType.valueFormatType, 0);
             Double sendableValue = Double.valueOf(value) / readingType.multiplyingFactor;
             Log.i("Enlite Service", "Characteristic " + characteristic.getUuid() + " discovered for service: " + value);
+            disableLocation = false;
             buildJsonObjectAndSend(readingType.toString(),sendableValue);
             sendMessageToActivity(readingType + ": " + sendableValue + " " + readingType.unit);
         }
@@ -359,6 +365,7 @@ public class BluetoothLeService extends Service {
     public void onCreate() {
         super.onCreate();
         dontRestartFlag = false;
+        startTimer();
         listener = new MyLocationListener();
         mLocationStartTimer.cancel();
         mLocationStartTimer = new Timer();
@@ -408,17 +415,25 @@ public class BluetoothLeService extends Service {
         startForeground(2, notification);
     }
 
-    private Timer timer;
+    private Timer timer = new Timer();
     private TimerTask timerTask;
 
     public void startTimer() {
+        timer.cancel();
         timer = new Timer();
         timerTask = new TimerTask() {
             public void run() {
                 Log.i("Count", "=========  " + (counter++));
+                if(mBluetoothGatt!=null && !mBluetoothGatt.connect()) {
+                    initBluetoothAdapter();
+                    connect(mBluetoothDeviceAddress);
+                } else if(mBluetoothGatt==null) {
+                    initBluetoothAdapter();
+                    connect(mBluetoothDeviceAddress);
+                }
             }
         };
-        timer.schedule(timerTask, 5000, 5000); //
+        timer.schedule(timerTask, 10000, 10000); //
     }
 
     public void stoptimertask() {
@@ -436,7 +451,7 @@ public class BluetoothLeService extends Service {
         mBluetoothGatt = null;
     }
 
-    public boolean initialize() {
+    public boolean initialize(String deviceName) {
         dontRestartFlag = false;
         serviceCharacteristicList.add(new ServiceCharacteristic("0000181A-0000-1000-8000-00805F9B34FB", "00002A6E-0000-1000-8000-00805F9B34FB"));
         serviceCharacteristicList.add(new ServiceCharacteristic("0000181A-0000-1000-8000-00805F9B34FB", "00002A6F-0000-1000-8000-00805F9B34FB"));
@@ -448,9 +463,18 @@ public class BluetoothLeService extends Service {
         characteristicUuidReadingTypeMap.put("059621E8-B53C-40A7-A006-EF9AFCCFF870", ReadingType.air_quality);
         characteristicUuidReadingTypeMap.put("4170C175-006F-4C07-8E3F-2AEB7312A788", ReadingType.data_accuracy);
         characteristicUuidReadingTypeMap.put("698427F4-410D-4DAB-A896-9806A8DFFC3B", ReadingType.dust);
+        mDeviceName = deviceName;
+        SharedPreferences sharedPreferences = getApplicationContext().getSharedPreferences(EXTRAS_DEVICE_ADDRESS, Context.MODE_PRIVATE);
+        SharedPreferences.Editor editor = sharedPreferences.edit();
+        editor.putString(EXTRAS_DEVICE_NAME, deviceName);
+        editor.apply();
 
         // For API level 18 and above, get a reference to BluetoothAdapter through
         // BluetoothManager.
+        return initBluetoothAdapter();
+    }
+
+    public boolean initBluetoothAdapter() {
         if (mBluetoothManager == null) {
             mBluetoothManager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
             if (mBluetoothManager == null) {
@@ -476,6 +500,9 @@ public class BluetoothLeService extends Service {
         } else {
             mBluetoothDeviceAddress = sharedPreferences.getString(EXTRAS_DEVICE_ADDRESS, "defaultValue");
         }
+        if(mDeviceName==null) {
+            mDeviceName = sharedPreferences.getString(EXTRAS_DEVICE_NAME, "defaultValue");
+        }
         editor.putString(EXTRAS_DEVICE_ADDRESS, address);
         dontRestartFlag = false;
         printString("Connect");
@@ -491,8 +518,6 @@ public class BluetoothLeService extends Service {
             if (mBluetoothGatt.connect()) {
                 mConnectionState = STATE_CONNECTING;
                 return true;
-            } else {
-                return false;
             }
         }
 
@@ -510,7 +535,7 @@ public class BluetoothLeService extends Service {
         mBluetoothGatt = device.connectGatt(this, true, btleGattCallback);
         Log.d(TAG, "Trying to create a new connection.");
         printString("Trying to create a new connection ");
-        mBluetoothDeviceAddress = address;
+        mBluetoothDeviceAddress = address!=null?address:mBluetoothDeviceAddress;
         mConnectionState = STATE_CONNECTING;
         return true;
     }
@@ -525,7 +550,10 @@ public class BluetoothLeService extends Service {
             mHandler.post(new Runnable() {
                 @Override
                 public void run() {
-                    fn_getlocation();
+                    if(!disableLocation) {
+                        fn_getlocation();
+                        disableLocation = true;
+                    }
                 }
             });
         }
@@ -535,8 +563,6 @@ public class BluetoothLeService extends Service {
         locationManager = (LocationManager) getApplicationContext().getSystemService(LOCATION_SERVICE);
         isGPSEnable = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER);
         isNetworkEnable = locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
-        Log.e("latitude",latitude+"");
-        Log.e("longitude",longitude+"");
 
         if (!isGPSEnable && !isNetworkEnable) {
 
@@ -612,7 +638,7 @@ public class BluetoothLeService extends Service {
             fields.put(ReadingType.location_latitude.toString(), latitude);
             fields.put(ReadingType.location_longitude.toString(), longitude);
             JSONObject tags = new JSONObject();
-            tags.put("sensorID", mBluetoothGatt.getDevice().getName());
+            tags.put("sensorID", mDeviceName);
             jsonObject.put("fields", fields);
             jsonObject.put("tags", tags);
             jsonObject.put("time", System.currentTimeMillis());
